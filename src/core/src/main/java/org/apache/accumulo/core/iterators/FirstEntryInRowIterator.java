@@ -100,9 +100,15 @@ public class FirstEntryInRowIterator extends SkippingIterator implements OptionD
     latestColumnFamilies = columnFamilies;
     latestInclusive = inclusive;
     
-    // seek to first possible pattern in range
-    getSource().seek(range, columnFamilies, inclusive);
-    lastRowFound = getSource().hasTop() ? getSource().getTopKey().getRow() : null;
+    Key startKey = range.getStartKey();
+    Range seekRange = new Range(startKey == null ? null : new Key(startKey.getRow()), true, range.getEndKey(), range.isEndKeyInclusive());
+    getSource().seek(seekRange, columnFamilies, inclusive);
+    
+    if (getSource().hasTop()) {
+      lastRowFound = getSource().getTopKey().getRow();
+      if (range.beforeStartKey(getSource().getTopKey()))
+        consume();
+    }
   }
   
   @Override
