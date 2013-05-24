@@ -34,6 +34,7 @@ import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.util.UtilWaitThread;
+import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.accumulo.server.tabletserver.Tablet;
 import org.apache.accumulo.server.tabletserver.Tablet.CommitSession;
 import org.apache.accumulo.server.tabletserver.TabletMutations;
@@ -413,11 +414,11 @@ public class TabletServerLogger {
     return seq;
   }
   
-  public void recover(Tablet tablet, List<String> logs, Set<String> tabletFiles, MutationReceiver mr) throws IOException {
+  public void recover(FileSystem fs, Tablet tablet, List<String> logs, Set<String> tabletFiles, MutationReceiver mr) throws IOException {
     if (!enabled(tablet))
       return;
     try {
-      SortedLogRecovery recovery = new SortedLogRecovery();
+      SortedLogRecovery recovery = new SortedLogRecovery(fs);
       KeyExtent extent = tablet.getExtent();
       recovery.recover(extent, logs, tabletFiles, mr);
     } catch (Exception e) {

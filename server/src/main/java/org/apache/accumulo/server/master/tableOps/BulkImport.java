@@ -74,7 +74,7 @@ import org.apache.accumulo.server.zookeeper.TransactionWatcher.ZooArbitrator;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.MapFile;
 import org.apache.hadoop.io.Text;
@@ -440,7 +440,7 @@ class CopyFailed extends MasterRepo {
       bifCopyQueue.waitUntilDone(workIds);
     }
 
-    fs.delete(new Path(error, BulkImport.FAILURES_TXT), true);
+    fs.deleteRecursively(new Path(error, BulkImport.FAILURES_TXT));
     return new CleanUpBulkImport(tableId, source, bulk, error);
   }
   
@@ -500,12 +500,12 @@ class LoadFiles extends MasterRepo {
     Path writable = new Path(this.errorDir, ".iswritable");
     if (!fs.createNewFile(writable)) {
       // Maybe this is a re-try... clear the flag and try again
-      fs.delete(writable, false);
+      fs.delete(writable);
       if (!fs.createNewFile(writable))
         throw new ThriftTableOperationException(tableId, null, TableOperation.BULK_IMPORT, TableOperationExceptionType.BULK_BAD_ERROR_DIRECTORY,
             "Unable to write to " + this.errorDir);
     }
-    fs.delete(writable, false);
+    fs.delete(writable);
     
     final Set<String> filesToLoad = Collections.synchronizedSet(new HashSet<String>());
     for (FileStatus f : files)

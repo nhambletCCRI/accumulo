@@ -38,6 +38,7 @@ import org.apache.accumulo.core.tabletserver.thrift.TabletClientService;
 import org.apache.accumulo.core.tabletserver.thrift.TabletClientService.Client;
 import org.apache.accumulo.core.util.ThriftUtil;
 import org.apache.accumulo.core.zookeeper.ZooUtil;
+import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.accumulo.server.security.SecurityConstants;
 import org.apache.accumulo.server.util.AddressUtil;
 import org.apache.accumulo.server.util.MetadataTable;
@@ -47,9 +48,7 @@ import org.apache.accumulo.trace.instrument.Span;
 import org.apache.accumulo.trace.instrument.Trace;
 import org.apache.accumulo.trace.instrument.Tracer;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.Trash;
 import org.apache.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.zookeeper.KeeperException;
@@ -60,13 +59,11 @@ public class GarbageCollectWriteAheadLogs {
   private final Instance instance;
   private final FileSystem fs;
   
-  private Trash trash;
+  private boolean useTrash;
   
-  GarbageCollectWriteAheadLogs(Instance instance, FileSystem fs, boolean noTrash) throws IOException {
+  GarbageCollectWriteAheadLogs(Instance instance, FileSystem fs, boolean useTrash) throws IOException {
     this.instance = instance;
     this.fs = fs;
-    if (!noTrash)
-      this.trash = new Trash(fs, fs.getConf());
   }
   
   public void collect(GCStatus status) {
@@ -139,8 +136,8 @@ public class GarbageCollectWriteAheadLogs {
           log.debug("Removing old-style WAL " + entry.getValue());
           try {
             Path path = new Path(Constants.getWalDirectory(conf), filename);
-            if (trash == null || !trash.moveToTrash(path))
-              fs.delete(path, true);
+            if (!useTrash || !fs.moveToTrash(path))
+              fs.deleteRecursively(path);
             status.currentLog.deleted++;
           } catch (FileNotFoundException ex) {
             // ignored
@@ -156,8 +153,8 @@ public class GarbageCollectWriteAheadLogs {
             log.debug("Removing WAL for offline server " + filename);
             try {
               Path path = new Path(serverPath, filename);
-              if (trash == null || !trash.moveToTrash(path))
-                fs.delete(path, true);
+              if (!useTrash || !fs.moveToTrash(path))
+                fs.deleteRecursively(path);
               status.currentLog.deleted++;
             } catch (FileNotFoundException ex) {
               // ignored
@@ -189,8 +186,8 @@ public class GarbageCollectWriteAheadLogs {
       log.debug("Removing sorted WAL " + sortedWALog);
       Path swalog = new Path(recoveryDir, sortedWALog);
       try {
-        if (trash == null || !trash.moveToTrash(swalog)) {
-          fs.delete(swalog, true);
+        if (!useTrash || !fs.moveToTrash(swalog)) {
+          fs.deleteRecursively(swalog);
         }
       } catch (FileNotFoundException ex) {
         // ignored

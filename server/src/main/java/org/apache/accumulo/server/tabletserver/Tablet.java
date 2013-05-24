@@ -1422,7 +1422,7 @@ public class Tablet {
         for (String relPath : datafiles.keySet())
           absPaths.add(rel2abs(relPath, extent));
         
-        tabletServer.recover(this, logEntries, absPaths, new MutationReceiver() {
+        tabletServer.recover(this.tabletServer.getFileSystem(), this, logEntries, absPaths, new MutationReceiver() {
           public void receive(Mutation m) {
             // LogReader.printMutation(m);
             Collection<ColumnUpdate> muts = m.getUpdates();

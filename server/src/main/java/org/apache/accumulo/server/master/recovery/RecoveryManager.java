@@ -35,10 +35,9 @@ import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.util.NamingThreadFactory;
 import org.apache.accumulo.core.zookeeper.ZooUtil;
 import org.apache.accumulo.server.master.Master;
-import org.apache.accumulo.server.trace.TraceFileSystem;
 import org.apache.accumulo.server.zookeeper.DistributedWorkQueue;
 import org.apache.accumulo.server.zookeeper.ZooCache;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.Logger;
 import org.apache.zookeeper.KeeperException;
@@ -82,8 +81,6 @@ public class RecoveryManager {
       boolean rescheduled = false;
       try {
         FileSystem localFs = master.getFileSystem();
-        if (localFs instanceof TraceFileSystem)
-          localFs = ((TraceFileSystem) localFs).getImplementation();
       
         long time = closer.close(master, localFs, getSource(host, filename));
       

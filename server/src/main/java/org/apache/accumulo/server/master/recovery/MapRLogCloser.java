@@ -19,7 +19,7 @@ package org.apache.accumulo.server.master.recovery;
 import java.io.IOException;
 
 import org.apache.accumulo.server.master.Master;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.log4j.Logger;
@@ -31,9 +31,10 @@ public class MapRLogCloser implements LogCloser {
   @Override
   public long close(Master m, FileSystem fs, Path path) throws IOException {
     log.info("Recovering file " + path.toString() + " by changing permission to readonly");
+    org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
     FsPermission roPerm = new FsPermission((short) 0444);
     try {
-      fs.setPermission(path, roPerm);
+      ns.setPermission(path, roPerm);
       return 0;
     } catch (IOException ex) {
       log.error("error recovering lease ", ex);

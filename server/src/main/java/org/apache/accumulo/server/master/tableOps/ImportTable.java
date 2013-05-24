@@ -61,7 +61,7 @@ import org.apache.accumulo.server.tabletserver.UniqueNameAllocator;
 import org.apache.accumulo.server.util.MetadataTable;
 import org.apache.accumulo.server.util.TablePropUtil;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
@@ -98,7 +98,7 @@ class FinishImportTable extends MasterRepo {
   @Override
   public Repo<Master> call(long tid, Master env) throws Exception {
     
-    env.getFileSystem().delete(new Path(tableInfo.importDir, "mappings.txt"), true);
+    env.getFileSystem().deleteRecursively(new Path(tableInfo.importDir, "mappings.txt"));
     
     TableManager.getInstance().transitionTableState(tableInfo.tableId, TableState.ONLINE);
     
@@ -365,7 +365,7 @@ class MapImportFileNames extends MasterRepo {
   
   @Override
   public void undo(long tid, Master env) throws Exception {
-    env.getFileSystem().delete(new Path(tableInfo.importDir), true);
+    env.getFileSystem().deleteRecursively(new Path(tableInfo.importDir));
   }
 }
 
@@ -414,7 +414,8 @@ class ImportPopulateZookeeper extends MasterRepo {
     Path path = new Path(tableInfo.exportDir, Constants.EXPORT_FILE);
     
     try {
-      return TableOperationsImpl.getExportedProps(fs, path);
+      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
+      return TableOperationsImpl.getExportedProps(ns, path);
     } catch (IOException ioe) {
       throw new ThriftTableOperationException(tableInfo.tableId, tableInfo.tableName, TableOperation.IMPORT, TableOperationExceptionType.OTHER,
           "Error reading table props from " + path + " " + ioe.getMessage());

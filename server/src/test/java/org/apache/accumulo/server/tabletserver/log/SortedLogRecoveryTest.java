@@ -29,28 +29,26 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.Map.Entry;
 
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.Value;
-import org.apache.accumulo.core.util.CachedConfiguration;
 import org.apache.accumulo.server.data.ServerMutation;
+import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystemImpl;
 import org.apache.accumulo.server.logger.LogEvents;
 import org.apache.accumulo.server.logger.LogFileKey;
 import org.apache.accumulo.server.logger.LogFileValue;
-import org.apache.accumulo.server.tabletserver.log.MutationReceiver;
-import org.apache.accumulo.server.tabletserver.log.SortedLogRecovery;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.MapFile;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.MapFile.Writer;
+import org.apache.hadoop.io.Text;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 public class SortedLogRecoveryTest {
   
@@ -115,29 +113,31 @@ public class SortedLogRecoveryTest {
   }
   
   private static List<Mutation> recover(Map<String,KeyValue[]> logs, Set<String> files, KeyExtent extent) throws IOException {
-    final String workdir = "workdir";
-    Configuration conf = CachedConfiguration.getInstance();
-    FileSystem local = FileSystem.getLocal(conf).getRaw();
-    local.delete(new Path(workdir), true);
+    TemporaryFolder root = new TemporaryFolder();
+    root.create();
+    final String workdir = "file://" + root.getRoot().getAbsolutePath() + "/workdir";
+    FileSystem fs = FileSystemImpl.getLocal();
+    fs.deleteRecursively(new Path(workdir));
     ArrayList<String> dirs = new ArrayList<String>();
     try {
       for (Entry<String,KeyValue[]> entry : logs.entrySet()) {
         String path = workdir + "/" + entry.getKey();
-        Writer map = new MapFile.Writer(conf, local, path + "/log1", LogFileKey.class, LogFileValue.class);
+        org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
+        Writer map = new MapFile.Writer(ns.getConf(), ns, path + "/log1", LogFileKey.class, LogFileValue.class);
         for (KeyValue lfe : entry.getValue()) {
           map.append(lfe.key, lfe.value);
         }
         map.close();
-        local.create(new Path(path, "finished")).close();
+        ns.create(new Path(path, "finished")).close();
         dirs.add(path);
       }
       // Recover
-      SortedLogRecovery recovery = new SortedLogRecovery();
+      SortedLogRecovery recovery = new SortedLogRecovery(fs);
       CaptureMutations capture = new CaptureMutations();
       recovery.recover(extent, dirs, files, capture);
       return capture.result;
     } finally {
-      local.delete(new Path(workdir), true);
+      root.delete();
     }
   }
   

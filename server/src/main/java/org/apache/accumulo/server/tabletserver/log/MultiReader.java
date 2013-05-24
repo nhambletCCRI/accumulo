@@ -19,10 +19,9 @@ package org.apache.accumulo.server.tabletserver.log;
 import java.io.EOFException;
 import java.io.IOException;
 
+import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.commons.collections.buffer.PriorityBuffer;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
@@ -87,7 +86,7 @@ public class MultiReader {
   
   private PriorityBuffer heap = new PriorityBuffer();
   
-  public MultiReader(FileSystem fs, Configuration conf, String directory) throws IOException {
+  public MultiReader(FileSystem fs, String directory) throws IOException {
     boolean foundFinish = false;
     for (FileStatus child : fs.listStatus(new Path(directory))) {
       if (child.getPath().getName().startsWith("_"))
@@ -96,7 +95,8 @@ public class MultiReader {
         foundFinish = true;
         continue;
       }
-      heap.add(new Index(new Reader(fs, child.getPath().toString(), conf)));
+      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(child.getPath());
+      heap.add(new Index(new Reader(ns, child.getPath().toString(), ns.getConf())));
     }
     if (!foundFinish)
       throw new IOException("Sort \"finished\" flag not found in " + directory);
