@@ -14,9 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/**
- * 
- */
 package org.apache.accumulo.core.util;
 
 import java.util.Collection;
@@ -26,6 +23,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
@@ -39,7 +38,7 @@ public class LocalityGroupUtil {
   
   // private static final Logger log = Logger.getLogger(ColumnFamilySet.class);
   
-  public static Set<ByteSequence> EMPTY_CF_SET = Collections.emptySet();
+  public static final Set<ByteSequence> EMPTY_CF_SET = Collections.emptySet();
   
   public static Set<ByteSequence> families(Collection<Column> columns) {
     Set<ByteSequence> result = new HashSet<ByteSequence>(columns.size());
@@ -143,7 +142,7 @@ public class LocalityGroupUtil {
   }
   
   public static String encodeColumnFamilies(Set<Text> colFams) {
-    HashSet<String> ecfs = new HashSet<String>();
+    SortedSet<String> ecfs = new TreeSet<String>();
     
     StringBuilder sb = new StringBuilder();
     

@@ -26,7 +26,9 @@ import java.util.UUID;
 import jline.ConsoleReader;
 
 import org.apache.accumulo.core.Constants;
+import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
+import org.apache.accumulo.core.client.impl.thrift.ThriftSecurityException;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.data.Key;
@@ -38,6 +40,7 @@ import org.apache.accumulo.core.file.FileUtil;
 import org.apache.accumulo.core.iterators.user.VersioningIterator;
 import org.apache.accumulo.core.master.state.tables.TableState;
 import org.apache.accumulo.core.master.thrift.MasterGoalState;
+import org.apache.accumulo.core.security.SecurityUtil;
 import org.apache.accumulo.core.util.CachedConfiguration;
 import org.apache.accumulo.core.zookeeper.ZooUtil;
 import org.apache.accumulo.fate.zookeeper.IZooReaderWriter;
@@ -49,9 +52,8 @@ import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.accumulo.server.constraints.MetadataConstraints;
 import org.apache.accumulo.server.iterators.MetadataBulkLoadFilter;
 import org.apache.accumulo.server.master.state.tables.TableManager;
+import org.apache.accumulo.server.security.AuditedSecurityOperation;
 import org.apache.accumulo.server.security.SecurityConstants;
-import org.apache.accumulo.server.security.SecurityUtil;
-import org.apache.accumulo.server.security.ZKAuthenticator;
 import org.apache.accumulo.server.tabletserver.TabletTime;
 import org.apache.accumulo.server.zookeeper.ZooReaderWriter;
 import org.apache.hadoop.conf.Configuration;
@@ -63,14 +65,15 @@ import org.apache.log4j.Logger;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.Ids;
 
+import com.beust.jcommander.Parameter;
+
 /**
  * This class is used to setup the directory structure and the root tablet to get an instance started
  * 
  */
 public class Initialize {
   private static final Logger log = Logger.getLogger(Initialize.class);
-  private static final String ROOT_USER = "root";
-  private static boolean clearInstanceName = false;
+  private static final String DEFAULT_ROOT_USER = "root";
   
   private static ConsoleReader reader = null;
   
@@ -86,7 +89,7 @@ public class Initialize {
     initialMetadataConf.put(Property.TABLE_FILE_REPLICATION.getKey(), "5");
     initialMetadataConf.put(Property.TABLE_WALOG_ENABLED.getKey(), "true");
     initialMetadataConf.put(Property.TABLE_MAJC_RATIO.getKey(), "1");
-    initialMetadataConf.put(Property.TABLE_SPLIT_THRESHOLD.getKey(), "4M");
+    initialMetadataConf.put(Property.TABLE_SPLIT_THRESHOLD.getKey(), "64M");
     initialMetadataConf.put(Property.TABLE_CONSTRAINT_PREFIX.getKey() + "1", MetadataConstraints.class.getName());
     initialMetadataConf.put(Property.TABLE_ITERATOR_PREFIX.getKey() + "scan.vers", "10," + VersioningIterator.class.getName());
     initialMetadataConf.put(Property.TABLE_ITERATOR_PREFIX.getKey() + "scan.vers.opt.maxVersions", "1");
@@ -107,7 +110,7 @@ public class Initialize {
     initialMetadataConf.put(Property.TABLE_BLOCKCACHE_ENABLED.getKey(), "true");
   }
   
-  public static boolean doInit(Configuration conf, FileSystem fs) throws IOException {
+  public static boolean doInit(Opts opts, Configuration conf, FileSystem fs) throws IOException {
     if (!ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_URI).equals(""))
       log.info("Hadoop Filesystem is " + ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_URI));
     else
@@ -150,34 +153,34 @@ public class Initialize {
     // abort, we don't leave an inconsistent HDFS/ZooKeeper structure
     String instanceNamePath;
     try {
-      instanceNamePath = getInstanceNamePath();
+      instanceNamePath = getInstanceNamePath(opts);
     } catch (Exception e) {
       log.fatal("Failed to talk to zookeeper", e);
       return false;
     }
-    byte[] rootpass = getRootPassword();
-    return initialize(instanceNamePath, fs, rootpass);
+    opts.rootpass = getRootPassword(opts);
+    return initialize(opts, instanceNamePath, fs);
   }
   
-  public static boolean initialize(String instanceNamePath, FileSystem fs, byte[] rootpass) {
+  public static boolean initialize(Opts opts, String instanceNamePath, FileSystem fs) {
     
     UUID uuid = UUID.randomUUID();
     try {
-      initZooKeeper(uuid.toString(), instanceNamePath);
+      initZooKeeper(opts, uuid.toString(), instanceNamePath);
     } catch (Exception e) {
       log.fatal("Failed to initialize zookeeper", e);
       return false;
     }
     
     try {
-      initFileSystem(fs, fs.getConf(), uuid);
+      initFileSystem(opts, fs, fs.getConf(), uuid);
     } catch (Exception e) {
       log.fatal("Failed to initialize filesystem", e);
       return false;
     }
     
     try {
-      initSecurity(uuid.toString(), rootpass);
+      initSecurity(opts, uuid.toString());
     } catch (Exception e) {
       log.fatal("Failed to initialize security", e);
       return false;
@@ -198,8 +201,8 @@ public class Initialize {
       return false;
     }
   }
-
-  private static void initFileSystem(FileSystem fs, Configuration conf, UUID uuid) throws IOException {
+  
+  private static void initFileSystem(Opts opts, FileSystem fs, Configuration conf, UUID uuid) throws IOException {
     FileStatus fstat;
     
     // the actual disk location of the root tablet
@@ -333,14 +336,14 @@ public class Initialize {
     }
   }
   
-  private static void initZooKeeper(String uuid, String instanceNamePath) throws KeeperException, InterruptedException {
+  private static void initZooKeeper(Opts opts, String uuid, String instanceNamePath) throws KeeperException, InterruptedException {
     // setup basic data in zookeeper
     IZooReaderWriter zoo = ZooReaderWriter.getInstance();
     ZooUtil.putPersistentData(zoo.getZooKeeper(), Constants.ZROOT, new byte[0], -1, NodeExistsPolicy.SKIP, Ids.OPEN_ACL_UNSAFE);
     ZooUtil.putPersistentData(zoo.getZooKeeper(), Constants.ZROOT + Constants.ZINSTANCES, new byte[0], -1, NodeExistsPolicy.SKIP, Ids.OPEN_ACL_UNSAFE);
     
     // setup instance name
-    if (clearInstanceName)
+    if (opts.clearInstanceName)
       zoo.recursiveDelete(instanceNamePath, NodeMissingPolicy.SKIP);
     zoo.putPersistentData(instanceNamePath, uuid.getBytes(), NodeExistsPolicy.FAIL);
     
@@ -366,19 +369,23 @@ public class Initialize {
     zoo.putPersistentData(zkInstanceRoot + Constants.ZRECOVERY, new byte[] {'0'}, NodeExistsPolicy.FAIL);
   }
   
-  private static String getInstanceNamePath() throws IOException, KeeperException, InterruptedException {
+  private static String getInstanceNamePath(Opts opts) throws IOException, KeeperException, InterruptedException {
     // setup the instance name
     String instanceName, instanceNamePath = null;
     boolean exists = true;
     do {
-      instanceName = getConsoleReader().readLine("Instance name : ");
+      if (opts.cliInstanceName == null) {
+        instanceName = getConsoleReader().readLine("Instance name : ");
+      } else {
+        instanceName = opts.cliInstanceName;
+      }
       if (instanceName == null)
         System.exit(0);
       instanceName = instanceName.trim();
       if (instanceName.length() == 0)
         continue;
       instanceNamePath = Constants.ZROOT + Constants.ZINSTANCES + "/" + instanceName;
-      if (clearInstanceName) {
+      if (opts.clearInstanceName) {
         exists = false;
         break;
       } else if ((boolean) (exists = ZooReaderWriter.getInstance().exists(instanceNamePath))) {
@@ -386,22 +393,25 @@ public class Initialize {
         if (decision == null)
           System.exit(0);
         if (decision.length() == 1 && decision.toLowerCase(Locale.ENGLISH).charAt(0) == 'y') {
-          clearInstanceName = true;
+          opts.clearInstanceName = true;
           exists = false;
         }
       }
     } while (exists);
     return instanceNamePath;
   }
-  
-  private static byte[] getRootPassword() throws IOException {
+
+  private static byte[] getRootPassword(Opts opts) throws IOException {
+    if (opts.cliPassword != null) {
+      return opts.cliPassword.getBytes();
+    }
     String rootpass;
     String confirmpass;
     do {
-      rootpass = getConsoleReader().readLine("Enter initial password for " + ROOT_USER + ": ", '*');
+      rootpass = getConsoleReader().readLine("Enter initial password for " + DEFAULT_ROOT_USER + " (this may not be applicable for your security setup): ", '*');
       if (rootpass == null)
         System.exit(0);
-      confirmpass = getConsoleReader().readLine("Confirm initial password for " + ROOT_USER + ": ", '*');
+      confirmpass = getConsoleReader().readLine("Confirm initial password for " + DEFAULT_ROOT_USER + ": ", '*');
       if (confirmpass == null)
         System.exit(0);
       if (!rootpass.equals(confirmpass))
@@ -410,12 +420,20 @@ public class Initialize {
     return rootpass.getBytes();
   }
   
-  private static void initSecurity(String iid, byte[] rootpass) throws AccumuloSecurityException {
-    new ZKAuthenticator(iid).initializeSecurity(SecurityConstants.getSystemCredentials(), ROOT_USER, rootpass);
+  private static void initSecurity(Opts opts, String iid) throws AccumuloSecurityException, ThriftSecurityException {
+    AuditedSecurityOperation.getInstance(iid, true).initializeSecurity(SecurityConstants.getSystemCredentials(), DEFAULT_ROOT_USER, opts.rootpass);
   }
   
   protected static void initMetadataConfig() throws IOException {
     try {
+      Configuration conf = CachedConfiguration.getInstance();
+      int max = conf.getInt("dfs.replication.max", 512);
+      // Hadoop 0.23 switched the min value configuration name
+      int min = Math.max(conf.getInt("dfs.replication.min", 1), conf.getInt("dfs.namenode.replication.min", 1));
+      if (max < 5)
+        setMetadataReplication(max, "max");
+      if (min > 5)
+        setMetadataReplication(min, "min");
       for (Entry<String,String> entry : initialMetadataConf.entrySet())
         if (!TablePropUtil.setTableProperty(Constants.METADATA_TABLE_ID, entry.getKey(), entry.getValue()))
           throw new IOException("Cannot create per-table property " + entry.getKey());
@@ -425,37 +443,55 @@ public class Initialize {
     }
   }
   
+  private static void setMetadataReplication(int replication, String reason) throws IOException {
+    String rep = getConsoleReader().readLine(
+        "Your HDFS replication " + reason
+        + " is not compatible with our default !METADATA replication of 5. What do you want to set your !METADATA replication to? (" + replication + ") ");
+    if (rep == null || rep.length() == 0)
+      rep = Integer.toString(replication);
+    else
+      // Lets make sure it's a number
+      Integer.parseInt(rep);
+    initialMetadataConf.put(Property.TABLE_FILE_REPLICATION.getKey(), rep);
+  }
+  
   public static boolean isInitialized(FileSystem fs) throws IOException {
     return (fs.exists(ServerConstants.getInstanceIdLocation()) || fs.exists(ServerConstants.getDataVersionLocation()));
   }
   
+  static class Opts extends Help {
+    @Parameter(names = "--reset-security", description = "just update the security information")
+    boolean resetSecurity = false;
+    @Parameter(names = "--clear-instance-name", description = "delete any existing instance name without prompting")
+    boolean clearInstanceName = false;
+    @Parameter(names = "--instance-name", description = "the instance name, if not provided, will prompt")
+    String cliInstanceName;
+    @Parameter(names = "--password", description = "set the password on the command line")
+    String cliPassword;
+    @Parameter(names = "--username", description = "set the root username on the command line")
+    String cliUser;
+    
+    byte[] rootpass = null;
+  }
+  
   public static void main(String[] args) {
-    boolean justSecurity = false;
-    
-    for (String arg : args) {
-      if (arg.equals("--reset-security")) {
-        justSecurity = true;
-      } else if (arg.equals("--clear-instance-name")) {
-        clearInstanceName = true;
-      } else {
-        RuntimeException e = new RuntimeException();
-        log.fatal("Bad argument " + arg, e);
-        throw e;
-      }
-    }
-    
+    Opts opts = new Opts();
+    opts.parseArgs(Initialize.class.getName(), args);
+        
     try {
       SecurityUtil.serverLogin();
       Configuration conf = CachedConfiguration.getInstance();
       
       FileSystem fs = FileUtil.getFileSystem(conf, ServerConfiguration.getSiteConfiguration());
-
-      if (justSecurity) {
-        if (isInitialized(fs))
-          initSecurity(HdfsZooInstance.getInstance().getInstanceID(), getRootPassword());
-        else
+      
+      if (opts.resetSecurity) {
+        if (isInitialized(fs)) {
+          opts.rootpass = getRootPassword(opts);
+          initSecurity(opts, HdfsZooInstance.getInstance().getInstanceID());
+        } else {
           log.fatal("Attempted to reset security on accumulo before it was initialized");
-      } else if (!doInit(conf, fs))
+        }
+      } else if (!doInit(opts, conf, fs))
         System.exit(-1);
     } catch (Exception e) {
       log.fatal(e, e);

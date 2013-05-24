@@ -27,6 +27,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
@@ -112,30 +113,44 @@ public class TableDiskUsage {
     return externalUsage;
   }
   
-  public static void printDiskUsage(AccumuloConfiguration acuConf, Collection<String> tables, FileSystem fs, Connector conn) throws TableNotFoundException,
+  public interface Printer {
+    void print(String line);
+  }
+  
+  public static void printDiskUsage(AccumuloConfiguration acuConf, Collection<String> tables, FileSystem fs, Connector conn, boolean humanReadable) 
+      throws TableNotFoundException,
       IOException {
-    
+    printDiskUsage(acuConf, tables, fs, conn, new Printer() {
+      @Override
+      public void print(String line) {
+        System.out.println(line);
+      }
+    }, humanReadable);
+  }
+  
+  public static Map<TreeSet<String>,Long> getDiskUsage(AccumuloConfiguration acuConf, Set<String> tableIds, FileSystem fs, Connector conn, boolean humanReadable)
+      throws IOException {
     TableDiskUsage tdu = new TableDiskUsage();
-    
-    HashSet<String> tableIds = new HashSet<String>();
-    
-    for (String tableName : tables) {
-      String tableId = conn.tableOperations().tableIdMap().get(tableName);
-      if (tableId == null)
-        throw new TableNotFoundException(null, tableName, "Table " + tableName + " not found");
-      
-      tableIds.add(tableId);
-    }
     
     for (String tableId : tableIds)
       tdu.addTable(tableId);
     
     HashSet<String> tablesReferenced = new HashSet<String>(tableIds);
+    HashSet<String> emptyTableIds = new HashSet<String>();
     
     for (String tableId : tableIds) {
-      Scanner mdScanner = conn.createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS);
+      Scanner mdScanner = null;
+      try {
+        mdScanner = conn.createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS);
+      } catch (TableNotFoundException e) {
+        throw new RuntimeException(e);
+      }
       mdScanner.fetchColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY);
       mdScanner.setRange(new KeyExtent(new Text(tableId), null, null).toMetadataRange());
+      
+      if (!mdScanner.iterator().hasNext()) {
+        emptyTableIds.add(tableId);
+      }
       
       for (Entry<Key,Value> entry : mdScanner) {
         String file = entry.getKey().getColumnQualifier().toString();
@@ -203,9 +218,36 @@ public class TableDiskUsage {
       usage.put(tableNames, entry.getValue());
     }
     
-    for (Entry<TreeSet<String>,Long> entry : usage.entrySet())
-      System.out.printf("%,24d %s\n", entry.getValue(), entry.getKey());
+    if (!emptyTableIds.isEmpty()) {
+      TreeSet<String> emptyTables = new TreeSet<String>();
+      for (String tableId : emptyTableIds) {
+        emptyTables.add(reverseTableIdMap.get(tableId));
+      }
+      usage.put(emptyTables, 0L);
+    }
     
+    return usage;
   }
   
+  public static void printDiskUsage(AccumuloConfiguration acuConf, Collection<String> tables, FileSystem fs, Connector conn, Printer printer, boolean humanReadable)
+      throws TableNotFoundException, IOException {
+    
+    HashSet<String> tableIds = new HashSet<String>();
+    
+    for (String tableName : tables) {
+      String tableId = conn.tableOperations().tableIdMap().get(tableName);
+      if (tableId == null)
+        throw new TableNotFoundException(null, tableName, "Table " + tableName + " not found");
+      
+      tableIds.add(tableId);
+    }
+    
+    Map<TreeSet<String>,Long> usage = getDiskUsage(acuConf, tableIds, fs, conn, humanReadable);
+
+    String valueFormat = humanReadable ? "%9s" : "%,24d";
+    for (Entry<TreeSet<String>,Long> entry : usage.entrySet()) {
+      Object value = humanReadable ? NumUtil.bigNumberForSize(entry.getValue()) : entry.getValue();
+      printer.print(String.format(valueFormat + " %s", value, entry.getKey()));
+    }
+  }
 }

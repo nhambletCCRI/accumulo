@@ -16,8 +16,14 @@
  */
 package org.apache.accumulo.core.util.shell.commands;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
+import org.apache.accumulo.core.client.IteratorSetting;
+import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.util.shell.Shell;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
@@ -25,46 +31,84 @@ import org.apache.commons.cli.Options;
 import org.apache.hadoop.io.Text;
 
 public class CompactCommand extends TableOperation {
-  private Option noFlushOption, waitOpt;
+  private Option noFlushOption, waitOpt, profileOpt, cancelOpt;
   private boolean flush;
   private Text startRow;
   private Text endRow;
+  private List<IteratorSetting> iterators;
   
   boolean override = false;
   private boolean wait;
   
+  private boolean cancel = false;
+
   @Override
   public String description() {
     return "sets all tablets for a table to major compact as soon as possible (based on current time)";
   }
   
-  protected void doTableOp(Shell shellState, String tableName) throws AccumuloException, AccumuloSecurityException {
+  protected void doTableOp(final Shell shellState, final String tableName) throws AccumuloException, AccumuloSecurityException {
     // compact the tables
-    try {
-      if (wait)
-        Shell.log.info("Compacting table ...");
-      
-      shellState.getConnector().tableOperations().compact(tableName, startRow, endRow, flush, wait);
-      
-      Shell.log.info("Compaction of table " + tableName + " " + (wait ? "completed" : "started") + " for given range");
-    } catch (Exception ex) {
-      throw new AccumuloException(ex);
+    
+    if (cancel) {
+      try {
+        shellState.getConnector().tableOperations().cancelCompaction(tableName);
+        Shell.log.info("Compaction canceled for table " + tableName);
+      } catch (TableNotFoundException e) {
+        throw new AccumuloException(e);
+      }
+    } else {
+      try {
+        if (wait) {
+          Shell.log.info("Compacting table ...");
+        }
+        
+        shellState.getConnector().tableOperations().compact(tableName, startRow, endRow, iterators, flush, wait);
+        
+        Shell.log.info("Compaction of table " + tableName + " " + (wait ? "completed" : "started") + " for given range");
+      } catch (Exception ex) {
+        throw new AccumuloException(ex);
+      }
     }
   }
   
   @Override
-  public int execute(String fullCommand, CommandLine cl, Shell shellState) throws Exception {
+  public int execute(final String fullCommand, final CommandLine cl, final Shell shellState) throws Exception {
+    
+    if (cl.hasOption(cancelOpt.getLongOpt())) {
+      cancel = true;
+      
+      if (cl.getOptions().length > 2) {
+        throw new IllegalArgumentException("Can not specify other options with cancel");
+      }
+    } else {
+      cancel = false;
+    }
+
     flush = !cl.hasOption(noFlushOption.getOpt());
     startRow = OptUtil.getStartRow(cl);
     endRow = OptUtil.getEndRow(cl);
     wait = cl.hasOption(waitOpt.getOpt());
     
+    if (cl.hasOption(profileOpt.getOpt())) {
+      List<IteratorSetting> iterators = shellState.iteratorProfiles.get(cl.getOptionValue(profileOpt.getOpt()));
+      if (iterators == null) {
+        Shell.log.error("Profile " + cl.getOptionValue(profileOpt.getOpt()) + " does not exist");
+        return -1;
+      }
+      
+      this.iterators = new ArrayList<IteratorSetting>(iterators);
+    } else {
+      this.iterators = Collections.emptyList();
+    }
+
+
     return super.execute(fullCommand, cl, shellState);
   }
   
   @Override
   public Options getOptions() {
-    Options opts = super.getOptions();
+    final Options opts = super.getOptions();
     
     opts.addOption(OptUtil.startRowOpt());
     opts.addOption(OptUtil.endRowOpt());
@@ -73,6 +117,13 @@ public class CompactCommand extends TableOperation {
     waitOpt = new Option("w", "wait", false, "wait for compact to finish");
     opts.addOption(waitOpt);
     
+    profileOpt = new Option("pn", "profile", true, "iterator profile name");
+    profileOpt.setArgName("profile");
+    opts.addOption(profileOpt);
+
+    cancelOpt = new Option(null, "cancel", false, "cancel user initiated compactions");
+    opts.addOption(cancelOpt);
+
     return opts;
   }
 }

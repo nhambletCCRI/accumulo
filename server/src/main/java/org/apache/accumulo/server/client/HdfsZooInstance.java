@@ -28,9 +28,12 @@ import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.Instance;
 import org.apache.accumulo.core.client.ZooKeeperInstance;
 import org.apache.accumulo.core.client.impl.ConnectorImpl;
+import org.apache.accumulo.core.client.security.tokens.AuthenticationToken;
+import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
+import org.apache.accumulo.core.security.CredentialHelper;
+import org.apache.accumulo.core.security.thrift.TCredentials;
 import org.apache.accumulo.core.util.ByteBufferUtil;
 import org.apache.accumulo.core.util.OpTimer;
 import org.apache.accumulo.core.util.StringUtil;
@@ -117,10 +120,11 @@ public class HdfsZooInstance implements Instance {
     return instanceId;
   }
   
-  @SuppressWarnings("deprecation")
   private static synchronized void _getInstanceID() {
     if (instanceId == null) {
-      instanceId = ZooKeeperInstance.getInstanceIDFromHdfs(ServerConstants.getInstanceIdLocation());
+      @SuppressWarnings("deprecation")
+      String instanceIdFromFile = ZooKeeperInstance.getInstanceIDFromHdfs(ServerConstants.getInstanceIdLocation());
+      instanceId = instanceIdFromFile;
     }
   }
   
@@ -139,18 +143,27 @@ public class HdfsZooInstance implements Instance {
     return (int) ServerConfiguration.getSiteConfiguration().getTimeInMillis(Property.INSTANCE_ZK_TIMEOUT);
   }
   
-  @SuppressWarnings("deprecation")
   @Override
   // Not really deprecated, just not for client use
-  public Connector getConnector(String user, byte[] pass) throws AccumuloException, AccumuloSecurityException {
-    return new ConnectorImpl(this, user, pass);
+  public Connector getConnector(String principal, AuthenticationToken token) throws AccumuloException, AccumuloSecurityException {
+    return getConnector(CredentialHelper.create(principal, token, getInstanceID()));
   }
   
   @SuppressWarnings("deprecation")
+  private Connector getConnector(TCredentials cred) throws AccumuloException, AccumuloSecurityException {
+    return new ConnectorImpl(this, cred);
+  }
+  
+  @Override
+  // Not really deprecated, just not for client use
+  public Connector getConnector(String user, byte[] pass) throws AccumuloException, AccumuloSecurityException {
+    return getConnector(user, new PasswordToken(pass));
+  }
+  
   @Override
   // Not really deprecated, just not for client use
   public Connector getConnector(String user, ByteBuffer pass) throws AccumuloException, AccumuloSecurityException {
-    return new ConnectorImpl(this, user, ByteBufferUtil.toBytes(pass));
+    return getConnector(user, ByteBufferUtil.toBytes(pass));
   }
   
   @Override
@@ -180,8 +193,9 @@ public class HdfsZooInstance implements Instance {
     System.out.println("Masters: " + StringUtil.join(instance.getMasterLocations(), ", "));
   }
   
+  @Deprecated
   @Override
-  public Connector getConnector(AuthInfo auth) throws AccumuloException, AccumuloSecurityException {
-    return getConnector(auth.user, auth.password);
+  public Connector getConnector(org.apache.accumulo.core.security.thrift.AuthInfo auth) throws AccumuloException, AccumuloSecurityException {
+    return getConnector(auth.user, auth.getPassword());
   }
 }

@@ -17,7 +17,7 @@
 -->
 <module>
 
-<package prefix="ct" value="org.apache.accumulo.server.test.randomwalk.concurrent"/>
+<package prefix="ct" value="org.apache.accumulo.test.randomwalk.concurrent"/>
 
 <fixture id="ct.ConcurrentFixture"/>
 
@@ -33,6 +33,7 @@
   <edge id="ct.ScanTable" weight="500"/>
   <edge id="ct.IsolatedScan" weight="500"/>
   <edge id="ct.AddSplits" weight="1000"/>
+  <edge id="ct.ListSplits" weight="1000"/>
   <edge id="ct.OfflineTable" weight="1000"/>
   <edge id="ct.Merge" weight="1000"/>
   <edge id="ct.Compact" weight="1000"/>
@@ -44,8 +45,11 @@
   <edge id="ct.ChangePermissions" weight="1000"/>
   <edge id="ct.CheckPermission" weight="1000"/>
   <edge id="ct.CheckBalance" weight="1000"/>
-  <edge id="ct.StopTabletServer" weight="1000"/>
+  <edge id="ct.StopTabletServer" weight="100"/>
   <edge id="ct.StartAll" weight="1000"/>
+  <edge id="ct.Shutdown" weight="10"/>
+  <edge id="ct.Config" weight="1000"/>
+  <edge id="ct.Apocalypse" weight="10"/>
   <edge id="END" weight="1"/>
 </node>
 
@@ -87,6 +91,10 @@
 </node>
 
 <node id="ct.AddSplits">
+  <edge id="dummy.ToAll" weight="1"/>
+</node>
+
+<node id="ct.ListSplits">
   <edge id="dummy.ToAll" weight="1"/>
 </node>
 
@@ -140,6 +148,18 @@
 
 <node id="ct.StartAll">
   <edge id="dummy.ToAll" weight="1"/>
+</node>
+
+<node id="ct.Config">
+  <edge id="dummy.ToAll" weight="1"/>
+</node>
+
+<node id="ct.Shutdown">
+  <edge id="ct.StartAll" weight="1"/>
+</node>
+
+<node id="ct.Apocalypse">
+  <edge id="ct.StartAll" weight="1"/>
 </node>
 
 </module>

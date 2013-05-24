@@ -27,7 +27,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.accumulo.core.client.IteratorSetting;
-import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Value;
@@ -35,6 +34,7 @@ import org.apache.accumulo.core.iterators.IteratorEnvironment;
 import org.apache.accumulo.core.iterators.SkippingIterator;
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator;
 import org.apache.accumulo.core.util.StringUtil;
+import org.apache.accumulo.server.master.state.TabletLocationState.BadLocationStateException;
 import org.apache.accumulo.server.util.AddressUtil;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.io.DataInputBuffer;
@@ -81,7 +81,7 @@ public class TabletStateChangeIterator extends SkippingIterator {
         String instance = parts[1];
         if (instance != null && instance.endsWith("]"))
           instance = instance.substring(0, instance.length() - 1);
-        result.add(new TServerInstance(AddressUtil.parseAddress(hostport, Property.TSERV_CLIENTPORT), instance));
+        result.add(new TServerInstance(AddressUtil.parseAddress(hostport), instance));
       }
     }
     return result;
@@ -114,8 +114,16 @@ public class TabletStateChangeIterator extends SkippingIterator {
       
       if (onlineTables == null || current == null)
         return;
-
-      TabletLocationState tls = MetaDataTableScanner.createTabletLocationState(k, v);
+      
+      TabletLocationState tls;
+      try {
+        tls = MetaDataTableScanner.createTabletLocationState(k, v);
+        if (tls == null)
+          return;
+      } catch (BadLocationStateException e) {
+        // maybe the master can do something with a tablet with bad/inconsistent state
+        return;
+      }
       // we always want data about merges
       MergeInfo merge = merges.get(tls.extent.getTableId());
       if (merge != null && merge.getRange() != null && merge.getRange().overlaps(tls.extent)) {
@@ -132,7 +140,7 @@ public class TabletStateChangeIterator extends SkippingIterator {
           if (!shouldBeOnline)
             return;
         case ASSIGNED_TO_DEAD_SERVER:
-          /* fall-through intentional */
+          return;
         case UNASSIGNED:
           if (shouldBeOnline)
             return;

@@ -35,8 +35,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 
-import org.apache.accumulo.cloudtrace.instrument.TraceExecutorService;
-import org.apache.accumulo.cloudtrace.instrument.Tracer;
+import org.apache.accumulo.trace.instrument.TraceExecutorService;
+import org.apache.accumulo.trace.instrument.Tracer;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.Instance;
@@ -46,7 +46,6 @@ import org.apache.accumulo.core.client.impl.ServerClient;
 import org.apache.accumulo.core.client.impl.Tables;
 import org.apache.accumulo.core.client.impl.thrift.ClientService;
 import org.apache.accumulo.core.client.impl.thrift.ClientService.Client;
-import org.apache.accumulo.core.client.impl.thrift.ClientService.Iface;
 import org.apache.accumulo.core.client.impl.thrift.TableOperation;
 import org.apache.accumulo.core.client.impl.thrift.TableOperationExceptionType;
 import org.apache.accumulo.core.client.impl.thrift.ThriftTableOperationException;
@@ -57,7 +56,6 @@ import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.file.FileOperations;
 import org.apache.accumulo.core.master.state.tables.TableState;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
 import org.apache.accumulo.core.util.Pair;
 import org.apache.accumulo.core.util.SimpleThreadPool;
 import org.apache.accumulo.core.util.UtilWaitThread;
@@ -105,7 +103,8 @@ import org.apache.thrift.TException;
  */
 
 public class BulkImport extends MasterRepo {
-  
+  public static final String FAILURES_TXT = "failures.txt";
+
   private static final long serialVersionUID = 1L;
   
   private static final Logger log = Logger.getLogger(BulkImport.class);
@@ -150,7 +149,12 @@ public class BulkImport extends MasterRepo {
     FileSystem fs = master.getFileSystem();
 
     Path errorPath = new Path(errorDir);
-    FileStatus errorStatus = fs.getFileStatus(errorPath);
+    FileStatus errorStatus = null;
+    try {
+      errorStatus = fs.getFileStatus(errorPath);
+    } catch (FileNotFoundException ex) {
+      // ignored
+    }
     if (errorStatus == null)
       throw new ThriftTableOperationException(tableId, null, TableOperation.BULK_IMPORT, TableOperationExceptionType.BULK_BAD_ERROR_DIRECTORY, errorDir
           + " does not exist");
@@ -292,13 +296,14 @@ class CleanUpBulkImport extends MasterRepo {
     MetadataTable.removeBulkLoadInProgressFlag("/" + bulkDir.getParent().getName() + "/" + bulkDir.getName());
     MetadataTable.addDeleteEntry(tableId, "/" + bulkDir.getName());
     log.debug("removing the metadata table markers for loaded files");
-    AuthInfo creds = SecurityConstants.getSystemCredentials();
-    Connector conn = HdfsZooInstance.getInstance().getConnector(creds.user, creds.password);
+    Connector conn = master.getConnector();
     MetadataTable.removeBulkLoadEntries(conn, tableId, tid);
     log.debug("releasing HDFS reservations for " + source + " and " + error);
     Utils.unreserveHdfsDirectory(source, tid);
     Utils.unreserveHdfsDirectory(error, tid);
     Utils.getReadLock(tableId, tid).unlock();
+    log.debug("completing bulk import transaction " + tid);
+    ZooArbitrator.cleanup(Constants.BULK_ARBITRATOR_TYPE, tid);
     return null;
   }
 }
@@ -361,18 +366,18 @@ class CopyFailed extends MasterRepo {
   }
   
   @Override
-  public Repo<Master> call(long tid, Master environment) throws Exception {
+  public Repo<Master> call(long tid, Master master) throws Exception {
 	//This needs to execute after the arbiter is stopped  
 	  
-    FileSystem fs = environment.getFileSystem();
+    FileSystem fs = master.getFileSystem();
 	  
-    if (!fs.exists(new Path(error, "failures.txt")))
+    if (!fs.exists(new Path(error, BulkImport.FAILURES_TXT)))
       return new CleanUpBulkImport(tableId, source, bulk, error);
     
     HashMap<String,String> failures = new HashMap<String,String>();
     HashMap<String,String> loadedFailures = new HashMap<String,String>();
     
-    FSDataInputStream failFile = fs.open(new Path(error, "failures.txt"));
+    FSDataInputStream failFile = fs.open(new Path(error, BulkImport.FAILURES_TXT));
     BufferedReader in = new BufferedReader(new InputStreamReader(failFile));
     try {
       String line = null;
@@ -391,15 +396,14 @@ class CopyFailed extends MasterRepo {
      */
 
     // determine which failed files were loaded
-    AuthInfo creds = SecurityConstants.getSystemCredentials();
-    Connector conn = HdfsZooInstance.getInstance().getConnector(creds.user, creds.password);
+    Connector conn = master.getConnector();
     Scanner mscanner = new IsolatedScanner(conn.createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS));
     mscanner.setRange(new KeyExtent(new Text(tableId), null, null).toMetadataRange());
     mscanner.fetchColumnFamily(Constants.METADATA_BULKFILE_COLUMN_FAMILY);
     
     for (Entry<Key,Value> entry : mscanner) {
       if (Long.parseLong(entry.getValue().toString()) == tid) {
-        String loadedFile = entry.getKey().getColumnQualifierData().toString();
+        String loadedFile = entry.getKey().getColumnQualifier().toString();
         String absPath = failures.remove(loadedFile);
         if (absPath != null) {
           loadedFailures.put(loadedFile, absPath);
@@ -412,7 +416,7 @@ class CopyFailed extends MasterRepo {
       Path orig = new Path(failure);
       Path dest = new Path(error, orig.getName());
       fs.rename(orig, dest);
-      log.debug("tid " + tid + " renamed " + orig + " to " + dest + ": failed");
+      log.debug("tid " + tid + " renamed " + orig + " to " + dest + ": import failed");
     }
     
     if (loadedFailures.size() > 0) {
@@ -436,7 +440,7 @@ class CopyFailed extends MasterRepo {
       bifCopyQueue.waitUntilDone(workIds);
     }
 
-    fs.delete(new Path(error, "failures.txt"), true);
+    fs.delete(new Path(error, BulkImport.FAILURES_TXT), true);
     return new CleanUpBulkImport(tableId, source, bulk, error);
   }
   
@@ -503,7 +507,7 @@ class LoadFiles extends MasterRepo {
     }
     fs.delete(writable, false);
     
-    final List<String> filesToLoad = Collections.synchronizedList(new ArrayList<String>());
+    final Set<String> filesToLoad = Collections.synchronizedSet(new HashSet<String>());
     for (FileStatus f : files)
       filesToLoad.add(f.getPath().toString());
     
@@ -519,6 +523,7 @@ class LoadFiles extends MasterRepo {
       }
       
       // Use the threadpool to assign files one-at-a-time to the server
+      final List<String> loaded = Collections.synchronizedList(new ArrayList<String>());
       for (final String file : filesToLoad) {
         results.add(threadPool.submit(new Callable<List<String>>() {
           @Override
@@ -530,19 +535,20 @@ class LoadFiles extends MasterRepo {
               // get a connection to a random tablet server, do not prefer cached connections because
               // this is running on the master and there are lots of connections to tablet servers
               // serving the !METADATA tablets
-              Pair<String,Client> pair = ServerClient.getConnection(master.getInstance(), false);
+              long timeInMillis = master.getConfiguration().getConfiguration().getTimeInMillis(Property.MASTER_BULK_TIMEOUT);
+              Pair<String,Client> pair = ServerClient.getConnection(master.getInstance(), false, timeInMillis);
               client = pair.getSecond();
               server = pair.getFirst();
               List<String> attempt = Collections.singletonList(file);
               log.debug("Asking " + pair.getFirst() + " to bulk import " + file);
               List<String> fail = client.bulkImportFiles(Tracer.traceInfo(), SecurityConstants.getSystemCredentials(), tid, tableId, attempt, errorDir, setTime);
               if (fail.isEmpty()) {
-                filesToLoad.remove(file);
+                loaded.add(file);
               } else {
                 failures.addAll(fail);
               }
             } catch (Exception ex) {
-              log.error("rpc failed server:" + server + ", tid:" + tid + " " + ex, ex);
+              log.error("rpc failed server:" + server + ", tid:" + tid + " " + ex);
             } finally {
               ServerClient.close(client);
             }
@@ -553,13 +559,14 @@ class LoadFiles extends MasterRepo {
       Set<String> failures = new HashSet<String>();
       for (Future<List<String>> f : results)
         failures.addAll(f.get());
+      filesToLoad.removeAll(loaded);
       if (filesToLoad.size() > 0) {
         log.debug("tid " + tid + " attempt " + (attempt + 1) + " " + sampleList(filesToLoad, 10) + " failed");
         UtilWaitThread.sleep(100);
       }
     }
     
-    FSDataOutputStream failFile = fs.create(new Path(errorDir, "failures.txt"), true);
+    FSDataOutputStream failFile = fs.create(new Path(errorDir, BulkImport.FAILURES_TXT), true);
     BufferedWriter out = new BufferedWriter(new OutputStreamWriter(failFile));
     try {
       for (String f : filesToLoad) {

@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map.Entry;
 
 import org.apache.accumulo.core.client.mock.MockInstance;
+import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.PartialKey;
@@ -53,10 +54,10 @@ public class ClientSideIteratorTest {
     resultSet3.add(new Key("part2", "", "DOC2"));
   }
   
-  public void checkResults(Iterable<Entry<Key,Value>> scanner, List<Key> results, PartialKey pk) {
+  public void checkResults(final Iterable<Entry<Key,Value>> scanner, final List<Key> results, final PartialKey pk) {
     int i = 0;
     for (Entry<Key,Value> entry : scanner) {
-      assertTrue(0 == entry.getKey().compareTo(results.get(i++), pk));
+      assertTrue(entry.getKey().equals(results.get(i++), pk));
     }
     assertEquals(i, results.size());
   }
@@ -64,9 +65,9 @@ public class ClientSideIteratorTest {
   @Test
   public void testIntersect() throws Exception {
     Instance instance = new MockInstance("local");
-    Connector conn = instance.getConnector("root", "".getBytes());
+    Connector conn = instance.getConnector("root", new PasswordToken(""));
     conn.tableOperations().create("intersect");
-    BatchWriter bw = conn.createBatchWriter("intersect", 1000, 10l, 1);
+    BatchWriter bw = conn.createBatchWriter("intersect", new BatchWriterConfig());
     Mutation m = new Mutation("part1");
     m.put("bar", "doc1", "value");
     m.put("bar", "doc2", "value");
@@ -83,8 +84,8 @@ public class ClientSideIteratorTest {
     bw.addMutation(m);
     bw.flush();
     
-    ClientSideIteratorScanner csis = new ClientSideIteratorScanner(conn.createScanner("intersect", new Authorizations()));
-    IteratorSetting si = new IteratorSetting(10, "intersect", IntersectingIterator.class);
+    final ClientSideIteratorScanner csis = new ClientSideIteratorScanner(conn.createScanner("intersect", new Authorizations()));
+    final IteratorSetting si = new IteratorSetting(10, "intersect", IntersectingIterator.class);
     IntersectingIterator.setColumnFamilies(si, new Text[] {new Text("bar"), new Text("foo")});
     csis.addScanIterator(si);
     
@@ -93,13 +94,13 @@ public class ClientSideIteratorTest {
   
   @Test
   public void testVersioning() throws Exception {
-    Instance instance = new MockInstance("local");
-    Connector conn = instance.getConnector("root", "".getBytes());
+    final Instance instance = new MockInstance("local");
+    final Connector conn = instance.getConnector("root", new PasswordToken(""));
     conn.tableOperations().create("table");
     conn.tableOperations().removeProperty("table", "table.iterator.scan.vers");
     conn.tableOperations().removeProperty("table", "table.iterator.majc.vers");
     conn.tableOperations().removeProperty("table", "table.iterator.minc.vers");
-    BatchWriter bw = conn.createBatchWriter("table", 1000, 10l, 1);
+    final BatchWriter bw = conn.createBatchWriter("table", new BatchWriterConfig());
     Mutation m = new Mutation("row1");
     m.put("colf", "colq", 1l, "value");
     m.put("colf", "colq", 2l, "value");
@@ -111,10 +112,10 @@ public class ClientSideIteratorTest {
     bw.addMutation(m);
     bw.flush();
     
-    Scanner scanner = conn.createScanner("table", new Authorizations());
+    final Scanner scanner = conn.createScanner("table", new Authorizations());
     
-    ClientSideIteratorScanner csis = new ClientSideIteratorScanner(scanner);
-    IteratorSetting si = new IteratorSetting(10, "localvers", VersioningIterator.class);
+    final ClientSideIteratorScanner csis = new ClientSideIteratorScanner(scanner);
+    final IteratorSetting si = new IteratorSetting(10, "localvers", VersioningIterator.class);
     si.addOption("maxVersions", "2");
     csis.addScanIterator(si);
     

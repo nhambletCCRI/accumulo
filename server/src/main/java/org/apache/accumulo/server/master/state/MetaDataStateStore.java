@@ -18,14 +18,17 @@ package org.apache.accumulo.server.master.state;
 
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.BatchWriter;
+import org.apache.accumulo.core.client.BatchWriterConfig;
 import org.apache.accumulo.core.client.Instance;
 import org.apache.accumulo.core.client.MutationsRejectedException;
 import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.data.Mutation;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
+import org.apache.accumulo.core.security.CredentialHelper;
+import org.apache.accumulo.core.security.thrift.TCredentials;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.security.SecurityConstants;
 import org.apache.hadoop.io.Text;
@@ -39,9 +42,9 @@ public class MetaDataStateStore extends TabletStateStore {
   
   final protected Instance instance;
   final protected CurrentState state;
-  final protected AuthInfo auths;
+  final protected TCredentials auths;
   
-  public MetaDataStateStore(Instance instance, AuthInfo auths, CurrentState state) {
+  public MetaDataStateStore(Instance instance, TCredentials auths, CurrentState state) {
     this.instance = instance;
     this.state = state;
     this.auths = auths;
@@ -80,7 +83,8 @@ public class MetaDataStateStore extends TabletStateStore {
   
   BatchWriter createBatchWriter() {
     try {
-      return instance.getConnector(auths).createBatchWriter(Constants.METADATA_TABLE_NAME, MAX_MEMORY, LATENCY, THREADS);
+      return instance.getConnector(auths.getPrincipal(), CredentialHelper.extractToken(auths)).createBatchWriter(Constants.METADATA_TABLE_NAME,
+          new BatchWriterConfig().setMaxMemory(MAX_MEMORY).setMaxLatency(LATENCY, TimeUnit.MILLISECONDS).setMaxWriteThreads(THREADS));
     } catch (TableNotFoundException e) {
       // ya, I don't think so
       throw new RuntimeException(e);

@@ -19,8 +19,9 @@ package org.apache.accumulo.core.client;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import org.apache.accumulo.core.client.security.tokens.AuthenticationToken;
+import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
 
 /**
  * This class represents the information a client needs to know to connect to an instance of accumulo.
@@ -81,21 +82,25 @@ public interface Instance {
    *           when a generic exception occurs
    * @throws AccumuloSecurityException
    *           when a user's credentials are invalid
+   * @deprecated since 1.5, use {@link #getConnector(String, AuthenticationToken)} with {@link PasswordToken}
    */
+  @Deprecated
   public abstract Connector getConnector(String user, byte[] pass) throws AccumuloException, AccumuloSecurityException;
   
   /**
    * Returns a connection to accumulo.
    * 
    * @param auth
-   *          An AuthInfo object.
+   *          An Credentials object.
    * @return the accumulo Connector
    * @throws AccumuloException
    *           when a generic exception occurs
    * @throws AccumuloSecurityException
    *           when a user's credentials are invalid
+   * @deprecated since 1.5, use {@link #getConnector(String, AuthenticationToken)} with {@link PasswordToken}
    */
-  public abstract Connector getConnector(AuthInfo auth) throws AccumuloException, AccumuloSecurityException;
+  @Deprecated
+  public abstract Connector getConnector(org.apache.accumulo.core.security.thrift.AuthInfo auth) throws AccumuloException, AccumuloSecurityException;
   
   /**
    * Returns a connection to accumulo.
@@ -109,7 +114,9 @@ public interface Instance {
    *           when a generic exception occurs
    * @throws AccumuloSecurityException
    *           when a user's credentials are invalid
+   * @deprecated since 1.5, use {@link #getConnector(String, AuthenticationToken)} with {@link PasswordToken}
    */
+  @Deprecated
   public abstract Connector getConnector(String user, ByteBuffer pass) throws AccumuloException, AccumuloSecurityException;
   
   /**
@@ -124,7 +131,9 @@ public interface Instance {
    *           when a generic exception occurs
    * @throws AccumuloSecurityException
    *           when a user's credentials are invalid
+   * @deprecated since 1.5, use {@link #getConnector(String, AuthenticationToken)} with {@link PasswordToken}
    */
+  @Deprecated
   public abstract Connector getConnector(String user, CharSequence pass) throws AccumuloException, AccumuloSecurityException;
   
   /**
@@ -141,4 +150,17 @@ public interface Instance {
    *          accumulo configuration
    */
   public abstract void setConfiguration(AccumuloConfiguration conf);
+  
+  /**
+   * Returns a connection to this instance of accumulo.
+   * 
+   * @param principal
+   *          a valid accumulo user
+   * @param token
+   *          Use the token type configured for the Accumulo instance you are connecting to. An Accumulo instance with default configurations will use
+   *          {@link PasswordToken}
+   * @since 1.5.0
+   */
+  public abstract Connector getConnector(String principal, AuthenticationToken token) throws AccumuloException, AccumuloSecurityException;
+  
 }

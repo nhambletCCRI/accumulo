@@ -56,6 +56,7 @@ public class TableConfiguration extends AccumuloConfiguration {
   /**
    * @deprecated not for client use
    */
+  @Deprecated
   private static ZooCache getTablePropCache() {
     Instance inst = HdfsZooInstance.getInstance();
     if (tablePropCache == null)
@@ -122,11 +123,6 @@ public class TableConfiguration extends AccumuloConfiguration {
     if (v != null)
       value = new String(v);
     return value;
-  }
-  
-  public static void invalidateCache() {
-    if (tablePropCache != null)
-      tablePropCache.clear();
   }
   
   @Override

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,10 +16,10 @@
  */
 package org.apache.accumulo.server.master.tableOps;
 
-import org.apache.accumulo.cloudtrace.instrument.Span;
-import org.apache.accumulo.cloudtrace.instrument.Trace;
-import org.apache.accumulo.cloudtrace.instrument.Tracer;
-import org.apache.accumulo.cloudtrace.thrift.TInfo;
+import org.apache.accumulo.trace.instrument.Span;
+import org.apache.accumulo.trace.instrument.Trace;
+import org.apache.accumulo.trace.instrument.Tracer;
+import org.apache.accumulo.trace.thrift.TInfo;
 import org.apache.accumulo.fate.Repo;
 
 

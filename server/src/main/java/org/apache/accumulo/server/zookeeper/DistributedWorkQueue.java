@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,11 +16,11 @@
  */
 package org.apache.accumulo.server.zookeeper;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.TimerTask;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -107,16 +107,16 @@ public class DistributedWorkQueue {
                   log.error("Error received when trying to delete entry in zookeeper " + childPath, e);
                 }
                 
-                try {
-                  zoo.recursiveDelete(lockPath, NodeMissingPolicy.SKIP);
-                } catch (Exception e) {
-                  log.error("Error received when trying to delete entry in zookeeper " + childPath, e);
-                }
-                
               } catch (Exception e) {
                 log.warn("Failed to process work " + child, e);
               }
               
+              try {
+                zoo.recursiveDelete(lockPath, NodeMissingPolicy.SKIP);
+              } catch (Exception e) {
+                log.error("Error received when trying to delete entry in zookeeper " + childPath, e);
+              }
+
             } finally {
               numTask.decrementAndGet();
             }
@@ -189,7 +189,7 @@ public class DistributedWorkQueue {
     
     Random r = new Random();
     // Add a little jitter to avoid all the tservers slamming zookeeper at once
-    SimpleTimer.getInstance().schedule(new TimerTask() {
+    SimpleTimer.getInstance().schedule(new Runnable() {
       @Override
       public void run() {
         try {
@@ -211,6 +211,12 @@ public class DistributedWorkQueue {
     zoo.putPersistentData(path + "/" + workId, data, NodeExistsPolicy.SKIP);
   }
   
+  public List<String> getWorkQueued() throws KeeperException, InterruptedException {
+    ArrayList<String> children = new ArrayList<String>(zoo.getChildren(path));
+    children.remove(LOCKS_NODE);
+    return children;
+  }
+
   public void waitUntilDone(Set<String> workIDs) throws KeeperException, InterruptedException {
     
     final String condVar = new String("cond");

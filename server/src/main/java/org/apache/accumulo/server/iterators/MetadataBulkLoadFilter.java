@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -27,20 +27,23 @@ import org.apache.accumulo.core.iterators.Filter;
 import org.apache.accumulo.core.iterators.IteratorEnvironment;
 import org.apache.accumulo.core.iterators.IteratorUtil.IteratorScope;
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator;
+import org.apache.accumulo.fate.zookeeper.TransactionWatcher.Arbitrator;
 import org.apache.accumulo.server.zookeeper.TransactionWatcher.ZooArbitrator;
+import org.apache.log4j.Logger;
 
 /**
  * A special iterator for the metadata table that removes inactive bulk load flags
  * 
  */
 public class MetadataBulkLoadFilter extends Filter {
+  private static Logger log = Logger.getLogger(MetadataBulkLoadFilter.class);
   
   enum Status {
     ACTIVE, INACTIVE
   }
   
   Map<Long,Status> bulkTxStatusCache;
-  ZooArbitrator arbitrator;
+  Arbitrator arbitrator;
   
   @Override
   public boolean accept(Key k, Value v) {
@@ -50,14 +53,14 @@ public class MetadataBulkLoadFilter extends Filter {
       Status status = bulkTxStatusCache.get(txid);
       if (status == null) {
         try {
-          if (arbitrator.transactionAlive(Constants.BULK_ARBITRATOR_TYPE, txid)) {
-            status = Status.ACTIVE;
-          } else {
+          if (arbitrator.transactionComplete(Constants.BULK_ARBITRATOR_TYPE, txid)) {
             status = Status.INACTIVE;
+          } else {
+            status = Status.ACTIVE;
           }
         } catch (Exception e) {
-          // TODO log
           status = Status.ACTIVE;
+          log.error(e, e);
         }
         
         bulkTxStatusCache.put(txid, status);
@@ -78,6 +81,10 @@ public class MetadataBulkLoadFilter extends Filter {
     }
 
     bulkTxStatusCache = new HashMap<Long,MetadataBulkLoadFilter.Status>();
-    arbitrator = new ZooArbitrator();
+    arbitrator = getArbitrator();
+  }
+  
+  protected Arbitrator getArbitrator() {
+    return new ZooArbitrator();
   }
 }

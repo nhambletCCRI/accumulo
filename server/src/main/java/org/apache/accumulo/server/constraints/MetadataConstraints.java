@@ -31,7 +31,9 @@ import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.util.ColumnFQ;
 import org.apache.accumulo.core.util.MetadataTable.DataFileValue;
 import org.apache.accumulo.core.zookeeper.ZooUtil;
+import org.apache.accumulo.fate.zookeeper.TransactionWatcher.Arbitrator;
 import org.apache.accumulo.server.client.HdfsZooInstance;
+import org.apache.accumulo.server.zookeeper.TransactionWatcher.ZooArbitrator;
 import org.apache.accumulo.server.zookeeper.ZooCache;
 import org.apache.accumulo.server.zookeeper.ZooLock;
 import org.apache.hadoop.io.Text;
@@ -72,6 +74,22 @@ public class MetadataConstraints implements Constraint {
     return false;
   }
   
+  static private ArrayList<Short> addViolation(ArrayList<Short> lst, int violation) {
+    if (lst == null)
+      lst = new ArrayList<Short>();
+    lst.add((short)violation);
+    return lst;
+  }
+  
+  static private ArrayList<Short> addIfNotPresent(ArrayList<Short> lst, int intViolation) {
+    if (lst == null)
+      return addViolation(lst, intViolation);
+    short violation = (short)intViolation;
+    if (!lst.contains(violation))
+      return addViolation(lst, intViolation);
+    return lst;
+  }
+  
   public List<Short> check(Environment env, Mutation mutation) {
     
     ArrayList<Short> violations = null;
@@ -83,8 +101,10 @@ public class MetadataConstraints implements Constraint {
     
     byte[] row = mutation.getRow();
     
-    // always allow rows that fall within reserved area
+    // always allow rows that fall within reserved areas
     if (row.length > 0 && row[0] == '~')
+      return null;
+    if (row.length > 2 && row[0] == '!' && row[1] == '!' && row[2] == '~')
       return null;
     
     for (byte b : row) {
@@ -96,62 +116,46 @@ public class MetadataConstraints implements Constraint {
         break;
       
       if (!validTableNameChars[0xff & b]) {
-        if (violations == null)
-          violations = new ArrayList<Short>();
-        if (!violations.contains((short) 4))
-          violations.add((short) 4);
+        violations = addIfNotPresent(violations, 4);
       }
     }
     
     if (!containsSemiC) {
       // see if last row char is <
       if (row.length == 0 || row[row.length - 1] != '<') {
-        if (violations == null)
-          violations = new ArrayList<Short>();
-        if (!violations.contains((short) 4))
-          violations.add((short) 4);
+        violations = addIfNotPresent(violations, 4);
       }
     } else {
       if (row.length == 0) {
-        if (violations == null)
-          violations = new ArrayList<Short>();
-        if (!violations.contains((short) 4))
-          violations.add((short) 4);
+        violations = addIfNotPresent(violations, 4);
       }
     }
     
     if (row.length > 0 && row[0] == '!') {
       if (row.length < 3 || row[1] != '0' || (row[2] != '<' && row[2] != ';')) {
-        if (violations == null)
-          violations = new ArrayList<Short>();
-        if (!violations.contains((short) 4))
-          violations.add((short) 4);
+        violations = addIfNotPresent(violations, 4);
       }
     }
     
     // ensure row is not less than Constants.METADATA_TABLE_ID
     if (new Text(row).compareTo(new Text(Constants.METADATA_TABLE_ID)) < 0) {
-      if (violations == null)
-        violations = new ArrayList<Short>();
-      violations.add((short) 5);
+      violations = addViolation(violations, 5);
     }
     
+    boolean checkedBulk = false;
+
     for (ColumnUpdate columnUpdate : colUpdates) {
       Text columnFamily = new Text(columnUpdate.getColumnFamily());
       
       if (columnUpdate.isDeleted()) {
         if (!isValidColumn(columnUpdate)) {
-          if (violations == null)
-            violations = new ArrayList<Short>();
-          violations.add((short) 2);
+          violations = addViolation(violations, 2);
         }
         continue;
       }
       
       if (columnUpdate.getValue().length == 0 && !columnFamily.equals(Constants.METADATA_SCANFILE_COLUMN_FAMILY)) {
-        if (violations == null)
-          violations = new ArrayList<Short>();
-        violations.add((short) 6);
+        violations = addViolation(violations, 6);
       }
       
       if (columnFamily.equals(Constants.METADATA_DATAFILE_COLUMN_FAMILY)) {
@@ -159,26 +163,65 @@ public class MetadataConstraints implements Constraint {
           DataFileValue dfv = new DataFileValue(columnUpdate.getValue());
           
           if (dfv.getSize() < 0 || dfv.getNumEntries() < 0) {
-            if (violations == null)
-              violations = new ArrayList<Short>();
-            violations.add((short) 1);
+            violations = addViolation(violations, 1);
           }
         } catch (NumberFormatException nfe) {
-          if (violations == null)
-            violations = new ArrayList<Short>();
-          violations.add((short) 1);
+          violations = addViolation(violations, 1);
         } catch (ArrayIndexOutOfBoundsException aiooe) {
-          if (violations == null)
-            violations = new ArrayList<Short>();
-          violations.add((short) 1);
+          violations = addViolation(violations, 1);
         }
       } else if (columnFamily.equals(Constants.METADATA_SCANFILE_COLUMN_FAMILY)) {
         
+      } else if (columnFamily.equals(Constants.METADATA_BULKFILE_COLUMN_FAMILY)) {
+        if (!columnUpdate.isDeleted() && !checkedBulk) {
+          // splits, which also write the time reference, are allowed to write this reference even when
+          // the transaction is not running because the other half of the tablet is holding a reference
+          // to the file.
+          boolean isSplitMutation = false;
+          // When a tablet is assigned, it re-writes the metadata.  It should probably only update the location information, 
+          // but it writes everything.  We allow it to re-write the bulk information if it is setting the location. 
+          // See ACCUMULO-1230. 
+          boolean isLocationMutation = false;
+          
+          HashSet<Text> dataFiles = new HashSet<Text>();
+          HashSet<Text> loadedFiles = new HashSet<Text>();
+
+          String tidString = new String(columnUpdate.getValue());
+          int otherTidCount = 0;
+
+          for (ColumnUpdate update : mutation.getUpdates()) {
+            if (new ColumnFQ(update).equals(Constants.METADATA_DIRECTORY_COLUMN)) {
+              isSplitMutation = true;
+            } else if (new Text(update.getColumnFamily()).equals(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY)) {
+              isLocationMutation = true;
+            } else if (new Text(update.getColumnFamily()).equals(Constants.METADATA_DATAFILE_COLUMN_FAMILY)) {
+              dataFiles.add(new Text(update.getColumnQualifier()));
+            } else if (new Text(update.getColumnFamily()).equals(Constants.METADATA_BULKFILE_COLUMN_FAMILY)) {
+              loadedFiles.add(new Text(update.getColumnQualifier()));
+              
+              if (!new String(update.getValue()).equals(tidString)) {
+                otherTidCount++;
+              }
+            }
+          }
+          
+          if (!isSplitMutation && !isLocationMutation) {
+            long tid = Long.parseLong(tidString);
+            
+            try {
+              if (otherTidCount > 0 || !dataFiles.equals(loadedFiles) || !getArbitrator().transactionAlive(Constants.BULK_ARBITRATOR_TYPE, tid)) {
+                violations = addViolation(violations, 8);
+              }
+            } catch (Exception ex) {
+              violations = addViolation(violations, 8);
+            }
+          }
+          
+          checkedBulk = true;
+        }
       } else {
         if (!isValidColumn(columnUpdate)) {
-          if (violations == null)
-            violations = new ArrayList<Short>();
-          violations.add((short) 2);
+          violations = addViolation(violations, 2);
         } else if (new ColumnFQ(columnUpdate).equals(Constants.METADATA_PREV_ROW_COLUMN) && columnUpdate.getValue().length > 0
             && (violations == null || !violations.contains((short) 4))) {
           KeyExtent ke = new KeyExtent(new Text(mutation.getRow()), (Text) null);
@@ -188,9 +231,7 @@ public class MetadataConstraints implements Constraint {
           boolean prevEndRowLessThanEndRow = per == null || ke.getEndRow() == null || per.compareTo(ke.getEndRow()) < 0;
           
           if (!prevEndRowLessThanEndRow) {
-            if (violations == null)
-              violations = new ArrayList<Short>();
-            violations.add((short) 3);
+            violations = addViolation(violations, 3);
           }
         } else if (new ColumnFQ(columnUpdate).equals(Constants.METADATA_LOCK_COLUMN)) {
           if (zooCache == null) {
@@ -211,9 +252,7 @@ public class MetadataConstraints implements Constraint {
           }
           
           if (!lockHeld) {
-            if (violations == null)
-              violations = new ArrayList<Short>();
-            violations.add((short) 7);
+            violations = addViolation(violations, 7);
           }
         }
         
@@ -221,12 +260,19 @@ public class MetadataConstraints implements Constraint {
     }
     
     if (violations != null) {
-      log.debug(" violating metadata mutation : " + mutation);
+      log.debug("violating metadata mutation : " + new String(mutation.getRow()));
+      for (ColumnUpdate update : mutation.getUpdates()) {
+        log.debug(" update: " + new String(update.getColumnFamily()) + ":" + new String(update.getColumnQualifier()) + " value " + (update.isDeleted() ? "[delete]" : new String(update.getValue())));
+      }
     }
     
     return violations;
   }
   
+  protected Arbitrator getArbitrator() {
+    return new ZooArbitrator();
+  }
+
   public String getViolationDescription(short violationCode) {
     switch (violationCode) {
       case 1:
@@ -243,6 +289,8 @@ public class MetadataConstraints implements Constraint {
         return "Empty values are not allowed for any " + Constants.METADATA_TABLE_NAME + " column";
       case 7:
         return "Lock not held in zookeeper by writer";
+      case 8:
+        return "Bulk load transaction no longer running";
     }
     return null;
   }

@@ -29,7 +29,7 @@ import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Range;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.security.Authorizations;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
+import org.apache.accumulo.core.security.thrift.TCredentials;
 import org.apache.accumulo.core.util.ArgumentChecker;
 import org.apache.accumulo.core.util.SimpleThreadPool;
 import org.apache.log4j.Logger;
@@ -44,7 +44,7 @@ public class TabletServerBatchReader extends ScannerOptions implements BatchScan
   private Instance instance;
   private ArrayList<Range> ranges;
   
-  private AuthInfo credentials;
+  private TCredentials credentials;
   private Authorizations authorizations = Constants.NO_AUTHS;
   
   private static int nextBatchReaderInstance = 1;
@@ -55,7 +55,7 @@ public class TabletServerBatchReader extends ScannerOptions implements BatchScan
   
   private final int batchReaderInstance = getNextBatchReaderInstance();
   
-  public TabletServerBatchReader(Instance instance, AuthInfo credentials, String table, Authorizations authorizations, int numQueryThreads) {
+  public TabletServerBatchReader(Instance instance, TCredentials credentials, String table, Authorizations authorizations, int numQueryThreads) {
     ArgumentChecker.notNull(instance, credentials, table, authorizations);
     this.instance = instance;
     this.credentials = credentials;
@@ -68,6 +68,7 @@ public class TabletServerBatchReader extends ScannerOptions implements BatchScan
     ranges = null;
   }
   
+  @Override
   public void close() {
     queryThreadPool.shutdownNow();
   }
@@ -107,6 +108,6 @@ public class TabletServerBatchReader extends ScannerOptions implements BatchScan
       throw new IllegalStateException("batch reader closed");
     }
     
-    return new TabletServerBatchReaderIterator(instance, credentials, table, authorizations, ranges, numThreads, queryThreadPool, this);
+    return new TabletServerBatchReaderIterator(instance, credentials, table, authorizations, ranges, numThreads, queryThreadPool, this, timeOut);
   }
 }

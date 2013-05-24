@@ -16,17 +16,17 @@
  */
 package org.apache.accumulo.core.client.impl;
 
-import org.apache.accumulo.cloudtrace.instrument.Tracer;
+import org.apache.accumulo.trace.instrument.Tracer;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.Instance;
 import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.client.impl.TabletLocator.TabletLocation;
+import org.apache.accumulo.core.client.impl.thrift.ThriftSecurityException;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Mutation;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
-import org.apache.accumulo.core.security.thrift.ThriftSecurityException;
+import org.apache.accumulo.core.security.thrift.TCredentials;
 import org.apache.accumulo.core.tabletserver.thrift.ConstraintViolationException;
 import org.apache.accumulo.core.tabletserver.thrift.NotServingTabletException;
 import org.apache.accumulo.core.tabletserver.thrift.TabletClientService;
@@ -44,21 +44,21 @@ public class Writer {
   private static final Logger log = Logger.getLogger(Writer.class);
   
   private Instance instance;
-  private AuthInfo credentials;
+  private TCredentials credentials;
   private Text table;
   
-  public Writer(Instance instance, AuthInfo credentials, Text table) {
+  public Writer(Instance instance, TCredentials credentials, Text table) {
     ArgumentChecker.notNull(instance, credentials, table);
     this.instance = instance;
     this.credentials = credentials;
     this.table = table;
   }
   
-  public Writer(Instance instance, AuthInfo credentials, String table) {
+  public Writer(Instance instance, TCredentials credentials, String table) {
     this(instance, credentials, new Text(table));
   }
   
-  private static void updateServer(Mutation m, KeyExtent extent, String server, AuthInfo ai, AccumuloConfiguration configuration) throws TException,
+  private static void updateServer(Mutation m, KeyExtent extent, String server, TCredentials ai, AccumuloConfiguration configuration) throws TException,
       NotServingTabletException, ConstraintViolationException, AccumuloSecurityException {
     ArgumentChecker.notNull(m, extent, server, ai);
     
@@ -84,7 +84,7 @@ public class Writer {
       throw new IllegalArgumentException("Can not add empty mutations");
     
     while (true) {
-      TabletLocation tabLoc = TabletLocator.getInstance(instance, credentials, table).locateTablet(new Text(m.getRow()), false, true);
+      TabletLocation tabLoc = TabletLocator.getInstance(instance, table).locateTablet(new Text(m.getRow()), false, true, credentials);
       
       if (tabLoc == null) {
         log.trace("No tablet location found for row " + new String(m.getRow()));
@@ -95,13 +95,13 @@ public class Writer {
       try {
         updateServer(m, tabLoc.tablet_extent, tabLoc.tablet_location, credentials, instance.getConfiguration());
         return;
-      } catch (TException e) {
-        log.trace("server = " + tabLoc.tablet_location, e);
-        TabletLocator.getInstance(instance, credentials, table).invalidateCache(tabLoc.tablet_extent);
       } catch (NotServingTabletException e) {
         log.trace("Not serving tablet, server = " + tabLoc.tablet_location);
-        TabletLocator.getInstance(instance, credentials, table).invalidateCache(tabLoc.tablet_extent);
-      }
+        TabletLocator.getInstance(instance, table).invalidateCache(tabLoc.tablet_extent);
+      } catch (TException e) {
+        log.error("error sending update to " + tabLoc.tablet_location + ": " + e);
+        TabletLocator.getInstance(instance, table).invalidateCache(tabLoc.tablet_extent);
+      } 
       
       UtilWaitThread.sleep(500);
     }

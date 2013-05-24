@@ -16,19 +16,22 @@
  */
 package org.apache.accumulo.core.util;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.HashMap;
+import java.util.Map;
 
-import org.apache.accumulo.cloudtrace.instrument.Span;
-import org.apache.accumulo.cloudtrace.instrument.Trace;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.impl.ClientExec;
 import org.apache.accumulo.core.client.impl.ClientExecReturn;
 import org.apache.accumulo.core.client.impl.ThriftTransportPool;
+import org.apache.accumulo.core.client.impl.thrift.ThriftSecurityException;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
-import org.apache.accumulo.core.security.thrift.ThriftSecurityException;
 import org.apache.accumulo.core.tabletserver.thrift.TabletClientService;
+import org.apache.accumulo.trace.instrument.Span;
+import org.apache.accumulo.trace.instrument.Trace;
 import org.apache.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.TServiceClient;
@@ -42,18 +45,17 @@ import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.TTransportFactory;
 
-
 public class ThriftUtil {
   private static final Logger log = Logger.getLogger(ThriftUtil.class);
-
+  
   public static class TraceProtocol extends TCompactProtocol {
-
+    
     @Override
     public void writeMessageBegin(TMessage message) throws TException {
       Trace.start("client:" + message.name);
       super.writeMessageBegin(message);
     }
-
+    
     @Override
     public void writeMessageEnd() throws TException {
       super.writeMessageEnd();
@@ -61,7 +63,7 @@ public class ThriftUtil {
       if (currentTrace != null)
         currentTrace.stop();
     }
-
+    
     public TraceProtocol(TTransport transport) {
       super(transport);
     }
@@ -69,7 +71,7 @@ public class ThriftUtil {
   
   public static class TraceProtocolFactory extends TCompactProtocol.Factory {
     private static final long serialVersionUID = 1L;
-
+    
     @Override
     public TProtocol getProtocol(TTransport trans) {
       return new TraceProtocol(trans);
@@ -77,7 +79,7 @@ public class ThriftUtil {
   }
   
   static private TProtocolFactory protocolFactory = new TraceProtocolFactory();
-  static private TTransportFactory transportFactory = new TFramedTransport.Factory();
+  static private TTransportFactory transportFactory = new TFramedTransport.Factory(Integer.MAX_VALUE);
   
   static public <T extends TServiceClient> T createClient(TServiceClientFactory<T> factory, TTransport transport) {
     return factory.getClient(protocolFactory.getProtocol(transport), protocolFactory.getProtocol(transport));
@@ -88,17 +90,19 @@ public class ThriftUtil {
     return createClient(factory, ThriftTransportPool.getInstance().getTransportWithDefaultTimeout(address, conf));
   }
   
+  static public <T extends TServiceClient> T getClientNoTimeout(TServiceClientFactory<T> factory, String address) throws TTransportException {
+    return createClient(factory, ThriftTransportPool.getInstance().getTransport(address, 0));
+  }
+  
   static public <T extends TServiceClient> T getClient(TServiceClientFactory<T> factory, String address, Property property, AccumuloConfiguration configuration)
       throws TTransportException {
-    int port = configuration.getPort(property);
-    TTransport transport = ThriftTransportPool.getInstance().getTransport(address, port);
+    long timeout = configuration.getTimeInMillis(property);
+    TTransport transport = ThriftTransportPool.getInstance().getTransport(address, timeout);
     return createClient(factory, transport);
   }
   
-  static public <T extends TServiceClient> T getClient(TServiceClientFactory<T> factory, String address, Property property, Property timeoutProperty,
-      AccumuloConfiguration configuration) throws TTransportException {
-    int port = configuration.getPort(property);
-    TTransport transport = ThriftTransportPool.getInstance().getTransport(address, port, configuration.getTimeInMillis(timeoutProperty));
+  static public <T extends TServiceClient> T getClient(TServiceClientFactory<T> factory, String address, long timeout) throws TTransportException {
+    TTransport transport = ThriftTransportPool.getInstance().getTransport(address, timeout);
     return createClient(factory, transport);
   }
   
@@ -109,7 +113,11 @@ public class ThriftUtil {
   }
   
   static public TabletClientService.Client getTServerClient(String address, AccumuloConfiguration conf) throws TTransportException {
-    return getClient(new TabletClientService.Client.Factory(), address, Property.TSERV_CLIENTPORT, Property.GENERAL_RPC_TIMEOUT, conf);
+    return getClient(new TabletClientService.Client.Factory(), address, Property.GENERAL_RPC_TIMEOUT, conf);
+  }
+  
+  static public TabletClientService.Client getTServerClient(String address, long timeout) throws TTransportException {
+    return getClient(new TabletClientService.Client.Factory(), address, timeout);
   }
   
   public static void execute(String address, AccumuloConfiguration conf, ClientExec<TabletClientService.Client> exec) throws AccumuloException,
@@ -153,8 +161,46 @@ public class ThriftUtil {
     }
   }
   
+  /**
+   * create a transport that is not pooled
+   */
+  public static TTransport createTransport(InetSocketAddress address, AccumuloConfiguration conf) throws TException {
+    TTransport transport = null;
+    
+    try {
+      transport = TTimeoutTransport.create(address, conf.getTimeInMillis(Property.GENERAL_RPC_TIMEOUT));
+      transport = ThriftUtil.transportFactory().getTransport(transport);
+      transport.open();
+      TTransport tmp = transport;
+      transport = null;
+      return tmp;
+    } catch (IOException ex) {
+      throw new TTransportException(ex);
+    } finally {
+      if (transport != null)
+        transport.close();
+    }
+  }
+
   public static TTransportFactory transportFactory() {
     return transportFactory;
+  }
+  
+  private final static Map<Integer,TTransportFactory> factoryCache = new HashMap<Integer,TTransportFactory>();
+  
+  synchronized public static TTransportFactory transportFactory(int maxFrameSize) {
+    TTransportFactory factory = factoryCache.get(maxFrameSize);
+    if (factory == null) {
+      factory = new TFramedTransport.Factory(maxFrameSize);
+      factoryCache.put(maxFrameSize, factory);
+    }
+    return factory;
+  }
+  
+  synchronized public static TTransportFactory transportFactory(long maxFrameSize) {
+    if (maxFrameSize > Integer.MAX_VALUE || maxFrameSize < 1)
+      throw new RuntimeException("Thrift transport frames are limited to " + Integer.MAX_VALUE);
+    return transportFactory((int) maxFrameSize);
   }
   
   public static TProtocolFactory protocolFactory() {

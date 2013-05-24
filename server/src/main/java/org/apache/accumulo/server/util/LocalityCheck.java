@@ -23,9 +23,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.accumulo.core.Constants;
+import org.apache.accumulo.server.cli.ClientOpts;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.Scanner;
-import org.apache.accumulo.core.client.ZooKeeperInstance;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Value;
@@ -39,13 +39,11 @@ import org.apache.hadoop.fs.Path;
 public class LocalityCheck {
   
   public int run(String[] args) throws Exception {
-    if (args.length < 4) {
-      System.err.println("Usage: " + LocalityCheck.class.getName() + " instance zookeepers username password");
-      System.exit(1);
-    }
-    ZooKeeperInstance instance = new ZooKeeperInstance(args[0], args[1]);
+    ClientOpts opts = new ClientOpts();
+    opts.parseArgs(LocalityCheck.class.getName(), args);
+    
     FileSystem fs = FileSystem.get(CachedConfiguration.getInstance());
-    Connector connector = instance.getConnector(args[2], args[3].getBytes());
+    Connector connector = opts.getConnector();
     Scanner scanner = connector.createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS);
     scanner.fetchColumnFamily(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY);
     scanner.fetchColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY);
@@ -64,7 +62,7 @@ public class LocalityCheck {
         addBlocks(fs, host, files, totalBlocks, localBlocks);
         files.clear();
       } else if (key.compareColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY) == 0) {
-        files.add(new String(KeyExtent.tableOfMetadataRow(key.getRow())) + key.getColumnQualifier().toString());
+        files.add(new String(KeyExtent.tableOfMetadataRow(key.getRow())) + slash(key.getColumnQualifier().toString()));
       }
     }
     System.out.println(" Server         %local  total blocks");
@@ -74,6 +72,12 @@ public class LocalityCheck {
     return 0;
   }
   
+  private static String slash(String path) {
+    if (path.startsWith("/"))
+      return path;
+    return "/" + path;
+  }
+
   private void addBlocks(FileSystem fs, String host, ArrayList<String> files, Map<String,Long> totalBlocks, Map<String,Long> localBlocks) throws Exception {
     long allBlocks = 0;
     long matchingBlocks = 0;

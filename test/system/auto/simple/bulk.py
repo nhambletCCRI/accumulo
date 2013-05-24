@@ -19,7 +19,7 @@ import logging
 import unittest
 import time
 
-from TestUtils import TestUtilsMixin, ROOT, ROOT_PASSWORD
+from TestUtils import TestUtilsMixin, ROOT, ROOT_PASSWORD, INSTANCE_NAME
 
 log = logging.getLogger('test.auto')
 
@@ -33,22 +33,22 @@ class SimpleBulkTest(TestUtilsMixin, unittest.TestCase):
 
     def testIngest(self, host, args, **kwargs):
         return self.runClassOn(host,
-                             'org.apache.accumulo.server.test.TestIngest',
+                             'org.apache.accumulo.test.TestIngest',
                              args,
                              **kwargs)
 
     def bulkLoad(self, host, dir):
         handle = self.runClassOn(
             self.masterHost(),
-            'org.apache.accumulo.server.test.BulkImportDirectory',
-            [ROOT, ROOT_PASSWORD,
-             'test_ingest', dir, '/testBulkFail'])
+            'org.apache.accumulo.test.BulkImportDirectory',
+            ['-u', ROOT, '-p', ROOT_PASSWORD,
+             '-t', 'test_ingest', '--source', dir, '--failures', '/testBulkFail', '-i', INSTANCE_NAME])
         self.wait(handle)
         self.assert_(handle.returncode == 0)
         
 
     def createRFiles(self):
-        args = '-rFile /testrf/rf%02d -timestamp 1 -size 50 -random 56 %1d %ld 1'
+        args = '--rfile /testrf/rf%02d --timestamp 1 --size 50 --random 56 --rows %1d --start %ld --cols 1 -u root -i ' + INSTANCE_NAME
         log.info('creating rfiles')
         handles = []
         for i in range(COUNT):

@@ -16,6 +16,8 @@
  */
 package org.apache.accumulo.core;
 
+import java.nio.charset.Charset;
+
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.data.Key;
@@ -28,9 +30,13 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 
 public class Constants {
-  public static final String VERSION = "1.5.0-SNAPSHOT";
-  public static final int DATA_VERSION = 4;
-  public static final int PREV_DATA_VERSION = 3;
+  public static final Charset UTF8 = Charset.forName("UTF-8");
+  public static final String VERSION = FilteredConstants.VERSION;
+  
+  // versions should never be negative
+  public static final Integer WIRE_VERSION = 2;
+  public static final int DATA_VERSION = 5;
+  public static final int PREV_DATA_VERSION = 4;
   
   // Zookeeper locations
   public static final String ZROOT = "/accumulo";
@@ -43,6 +49,7 @@ public class Constants {
   public static final String ZTABLE_STATE = "/state";
   public static final String ZTABLE_FLUSH_ID = "/flush-id";
   public static final String ZTABLE_COMPACT_ID = "/compact-id";
+  public static final String ZTABLE_COMPACT_CANCEL_ID = "/compact-cancel-id";
   
   public static final String ZROOT_TABLET = "/root_tablet";
   public static final String ZROOT_TABLET_LOCATION = ZROOT_TABLET + "/location";
@@ -75,7 +82,7 @@ public class Constants {
   public static final String ZNEXT_FILE = "/next_file";
   
   public static final String ZBULK_FAILED_COPYQ = "/bulk_failed_copyq";
-
+  
   public static final String ZHDFS_RESERVATIONS = "/hdfs_reservations";
   public static final String ZRECOVERY = "/recovery";
   
@@ -90,7 +97,9 @@ public class Constants {
   public static final Key METADATA_RESERVED_KEYSPACE_STOP_KEY = new Key(new Text(new byte[] {'~' + 1}));
   public static final Range METADATA_RESERVED_KEYSPACE = new Range(METADATA_RESERVED_KEYSPACE_START_KEY, true, METADATA_RESERVED_KEYSPACE_STOP_KEY, false);
   public static final String METADATA_DELETE_FLAG_PREFIX = "~del";
+  public static final String METADATA_DELETE_FLAG_FOR_METADATA_PREFIX = "!!" + METADATA_DELETE_FLAG_PREFIX;
   public static final Range METADATA_DELETES_KEYSPACE = new Range(new Key(new Text(METADATA_DELETE_FLAG_PREFIX)), true, new Key(new Text("~dem")), false);
+  public static final Range METADATA_DELETES_FOR_METADATA_KEYSPACE = new Range(new Key(new Text(METADATA_DELETE_FLAG_FOR_METADATA_PREFIX)), true, new Key(new Text("!!~dem")), false);
   public static final String METADATA_BLIP_FLAG_PREFIX = "~blip"; // BLIP = bulk load in progress
   public static final Range METADATA_BLIP_KEYSPACE = new Range(new Key(new Text(METADATA_BLIP_FLAG_PREFIX)), true, new Key(new Text("~bliq")), false);
   
@@ -160,36 +169,40 @@ public class Constants {
   public static final String MAPFILE_EXTENSION = "map";
   public static final String GENERATED_TABLET_DIRECTORY_PREFIX = "t-";
   
-  public static String getBaseDir(AccumuloConfiguration conf) {
+  public static final String EXPORT_METADATA_FILE = "metadata.bin";
+  public static final String EXPORT_TABLE_CONFIG_FILE = "table_config.txt";
+  public static final String EXPORT_FILE = "exportMetadata.zip";
+  public static final String EXPORT_INFO_FILE = "accumulo_export_info.txt";
+  
+  public static String getBaseDir(final AccumuloConfiguration conf) {
     return conf.get(Property.INSTANCE_DFS_DIR);
   }
   
-  public static String getTablesDir(AccumuloConfiguration conf) {
+  public static String getTablesDir(final AccumuloConfiguration conf) {
     return getBaseDir(conf) + "/tables";
   }
   
-  public static String getRecoveryDir(AccumuloConfiguration conf) {
+  public static String getRecoveryDir(final AccumuloConfiguration conf) {
     return getBaseDir(conf) + "/recovery";
   }
   
-  public static Path getDataVersionLocation(AccumuloConfiguration conf) {
+  public static Path getDataVersionLocation(final AccumuloConfiguration conf) {
     return new Path(getBaseDir(conf) + "/version");
   }
   
-  public static String getMetadataTableDir(AccumuloConfiguration conf) {
+  public static String getMetadataTableDir(final AccumuloConfiguration conf) {
     return getTablesDir(conf) + "/" + METADATA_TABLE_ID;
   }
   
-  public static String getRootTabletDir(AccumuloConfiguration conf) {
+  public static String getRootTabletDir(final AccumuloConfiguration conf) {
     return getMetadataTableDir(conf) + ZROOT_TABLET;
   }
   
   /**
    * @param conf
-   * @return
+   * @return The write-ahead log directory.
    */
-  public static String getWalDirectory(AccumuloConfiguration conf) {
+  public static String getWalDirectory(final AccumuloConfiguration conf) {
     return getBaseDir(conf) + "/wal";
   }
-  
 }

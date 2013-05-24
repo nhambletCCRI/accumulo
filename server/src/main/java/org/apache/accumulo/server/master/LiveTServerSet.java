@@ -24,17 +24,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimerTask;
 
-import org.apache.accumulo.cloudtrace.instrument.Tracer;
-import org.apache.accumulo.cloudtrace.instrument.thrift.TraceWrap;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.Instance;
+import org.apache.accumulo.core.client.impl.thrift.ThriftSecurityException;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
-import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.master.thrift.TabletServerStatus;
-import org.apache.accumulo.core.security.thrift.ThriftSecurityException;
 import org.apache.accumulo.core.tabletserver.thrift.NotServingTabletException;
 import org.apache.accumulo.core.tabletserver.thrift.TabletClientService;
 import org.apache.accumulo.core.util.ServerServices;
@@ -48,10 +44,14 @@ import org.apache.accumulo.server.util.time.SimpleTimer;
 import org.apache.accumulo.server.zookeeper.ZooCache;
 import org.apache.accumulo.server.zookeeper.ZooLock;
 import org.apache.accumulo.server.zookeeper.ZooReaderWriter;
+import org.apache.accumulo.trace.instrument.Tracer;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
 import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransport;
 import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.KeeperException.NoNodeException;
+import org.apache.zookeeper.KeeperException.NotEmptyException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.data.Stat;
@@ -98,12 +98,19 @@ public class LiveTServerSet implements Watcher {
       }
     }
     
-    public TabletServerStatus getTableMap() throws TException, ThriftSecurityException {
-      TabletClientService.Client client = ThriftUtil.getClient(new TabletClientService.Client.Factory(), address, conf);
+    public TabletServerStatus getTableMap(boolean usePooledConnection) throws TException, ThriftSecurityException {
+      
+      if (usePooledConnection == true)
+        throw new UnsupportedOperationException();
+      
+      TTransport transport = ThriftUtil.createTransport(address, conf);
+      
       try {
+        TabletClientService.Client client = ThriftUtil.createClient(new TabletClientService.Client.Factory(), transport);
         return client.getTabletServerStatus(Tracer.traceInfo(), SecurityConstants.getSystemCredentials());
       } finally {
-        ThriftUtil.returnClient(client);
+        if (transport != null)
+          transport.close();
       }
     }
     
@@ -128,8 +135,8 @@ public class LiveTServerSet implements Watcher {
     public void flush(ZooLock lock, String tableId, byte[] startRow, byte[] endRow) throws TException {
       TabletClientService.Client client = ThriftUtil.getClient(new TabletClientService.Client.Factory(), address, conf);
       try {
-        client.flush(Tracer.traceInfo(), SecurityConstants.getSystemCredentials(), lockString(lock), tableId, startRow == null ? null : ByteBuffer.wrap(startRow),
-            endRow == null ? null : ByteBuffer.wrap(endRow));
+        client.flush(Tracer.traceInfo(), SecurityConstants.getSystemCredentials(), lockString(lock), tableId,
+            startRow == null ? null : ByteBuffer.wrap(startRow), endRow == null ? null : ByteBuffer.wrap(endRow));
       } finally {
         ThriftUtil.returnClient(client);
       }
@@ -147,8 +154,8 @@ public class LiveTServerSet implements Watcher {
     public void splitTablet(ZooLock lock, KeyExtent extent, Text splitPoint) throws TException, ThriftSecurityException, NotServingTabletException {
       TabletClientService.Client client = ThriftUtil.getClient(new TabletClientService.Client.Factory(), address, conf);
       try {
-        client
-            .splitTablet(Tracer.traceInfo(), SecurityConstants.getSystemCredentials(), extent.toThrift(), ByteBuffer.wrap(splitPoint.getBytes(), 0, splitPoint.getLength()));
+        client.splitTablet(Tracer.traceInfo(), SecurityConstants.getSystemCredentials(), extent.toThrift(),
+            ByteBuffer.wrap(splitPoint.getBytes(), 0, splitPoint.getLength()));
       } finally {
         ThriftUtil.returnClient(client);
       }
@@ -166,8 +173,8 @@ public class LiveTServerSet implements Watcher {
     public void compact(ZooLock lock, String tableId, byte[] startRow, byte[] endRow) throws TException {
       TabletClientService.Client client = ThriftUtil.getClient(new TabletClientService.Client.Factory(), address, conf);
       try {
-        client.compact(Tracer.traceInfo(), SecurityConstants.getSystemCredentials(), lockString(lock), tableId, startRow == null ? null : ByteBuffer.wrap(startRow),
-            endRow == null ? null : ByteBuffer.wrap(endRow));
+        client.compact(Tracer.traceInfo(), SecurityConstants.getSystemCredentials(), lockString(lock), tableId,
+            startRow == null ? null : ByteBuffer.wrap(startRow), endRow == null ? null : ByteBuffer.wrap(endRow));
       } finally {
         ThriftUtil.returnClient(client);
       }
@@ -185,26 +192,19 @@ public class LiveTServerSet implements Watcher {
   }
   
   static class TServerInfo {
-    ZooLock lock;
     TServerConnection connection;
     TServerInstance instance;
-    TServerLockWatcher watcher;
     
-    TServerInfo(ZooLock lock, TServerInstance instance, TServerConnection connection, TServerLockWatcher watcher) {
-      this.lock = lock;
+    TServerInfo(TServerInstance instance, TServerConnection connection) {
       this.connection = connection;
       this.instance = instance;
-      this.watcher = watcher;
-    }
-    
-    void cleanup() throws InterruptedException, KeeperException {
-      lock.tryToCancelAsyncLockOrUnlock();
     }
   };
   
   // Map from tserver master service to server information
   private Map<String,TServerInfo> current = new HashMap<String,TServerInfo>();
-
+  private Map<String,Long> locklessServers = new HashMap<String,Long>();
+  
   public LiveTServerSet(Instance instance, AccumuloConfiguration conf, Listener cback) {
     this.cback = cback;
     this.instance = instance;
@@ -220,12 +220,12 @@ public class LiveTServerSet implements Watcher {
   
   public synchronized void startListeningForTabletServerChanges() {
     scanServers();
-    SimpleTimer.getInstance().schedule(new TimerTask() {
+    SimpleTimer.getInstance().schedule(new Runnable() {
       @Override
       public void run() {
         scanServers();
       }
-    }, 0, 1000);
+    }, 0, 5000);
   }
   
   public synchronized void scanServers() {
@@ -234,54 +234,16 @@ public class LiveTServerSet implements Watcher {
       final Set<TServerInstance> doomed = new HashSet<TServerInstance>();
       
       final String path = ZooUtil.getRoot(instance) + Constants.ZTSERVERS;
-      for (String server : getZooCache().getChildren(path)) {
-        // See if we have an async lock in place?
-        TServerInfo info = current.get(server);
-        TServerLockWatcher watcher;
-        ZooLock lock;
-        final String lockPath = path + "/" + server;
-        if (info != null) {
-          // yep: get out the lock/watcher so we can check on it
-          watcher = info.watcher;
-          lock = info.lock;
-        } else {
-          // nope: create a new lock and watcher
-          lock = new ZooLock(lockPath);
-          watcher = new TServerLockWatcher();
-          lock.lockAsync(watcher, "master".getBytes());
-        }
-        TServerInstance instance = null;
-        // Did we win the lock yet?
-        if (!lock.isLocked() && !watcher.gotLock && watcher.failureException == null) {
-          // Nope... there's a server out there: is this is a new server?
-          if (info == null) {
-            // Yep: hold onto the information about this server
-            Stat stat = new Stat();
-            byte[] lockData = ZooLock.getLockData(lockPath, stat);
-            String lockString = new String(lockData == null ? new byte[] {} : lockData);
-            if (lockString.length() > 0 && !lockString.equals("master")) {
-              ServerServices services = new ServerServices(new String(lockData));
-              InetSocketAddress client = services.getAddress(ServerServices.Service.TSERV_CLIENT);
-              InetSocketAddress addr = AddressUtil.parseAddress(server, Property.TSERV_CLIENTPORT);
-              TServerConnection conn = new TServerConnection(addr);
-              instance = new TServerInstance(client, stat.getEphemeralOwner());
-              info = new TServerInfo(lock, instance, conn, watcher);
-              current.put(server, info);
-              updates.add(instance);
-            } else {
-              lock.tryToCancelAsyncLockOrUnlock();
-            }
-          }
-        } else {
-          // Yes... there is no server here any more
-          lock.tryToCancelAsyncLockOrUnlock();
-          if (info != null) {
-            doomed.add(info.instance);
-            current.remove(server);
-            info.cleanup();
-          }
-        }
+      
+      HashSet<String> all = new HashSet<String>(current.keySet());
+      all.addAll(getZooCache().getChildren(path));
+      
+      locklessServers.keySet().retainAll(all);
+      
+      for (String server : all) {
+        checkServer(updates, doomed, path, server);
       }
+      
       // log.debug("Current: " + current.keySet());
       if (!doomed.isEmpty() || !updates.isEmpty())
         this.cback.update(this, doomed, updates);
@@ -290,25 +252,101 @@ public class LiveTServerSet implements Watcher {
     }
   }
   
+  private void deleteServerNode(String serverNode) throws InterruptedException, KeeperException {
+    try {
+      ZooReaderWriter.getInstance().delete(serverNode, -1);
+    } catch (NotEmptyException ex) {
+      // race condition: tserver created the lock after our last check; we'll see it at the next check
+    } catch (NoNodeException nne) {
+      // someone else deleted it
+    }
+  }
+  
+  private synchronized void checkServer(final Set<TServerInstance> updates, final Set<TServerInstance> doomed, final String path, final String server)
+      throws TException, InterruptedException, KeeperException {
+    
+    TServerInfo info = current.get(server);
+    
+    final String lockPath = path + "/" + server;
+    Stat stat = new Stat();
+    byte[] lockData = ZooLock.getLockData(getZooCache(), lockPath, stat);
+    
+    if (lockData == null) {
+      if (info != null) {
+        doomed.add(info.instance);
+        current.remove(server);
+      }
+      
+      Long firstSeen = locklessServers.get(server);
+      if (firstSeen == null) {
+        locklessServers.put(server, System.currentTimeMillis());
+      } else if (System.currentTimeMillis() - firstSeen > 600000) {
+        deleteServerNode(path + "/" + server);
+        locklessServers.remove(server);
+      }
+    } else {
+      locklessServers.remove(server);
+      ServerServices services = new ServerServices(new String(lockData));
+      InetSocketAddress client = services.getAddress(ServerServices.Service.TSERV_CLIENT);
+      InetSocketAddress addr = AddressUtil.parseAddress(server);
+      TServerInstance instance = new TServerInstance(client, stat.getEphemeralOwner());
+      
+      if (info == null) {
+        updates.add(instance);
+        current.put(server, new TServerInfo(instance, new TServerConnection(addr)));
+      } else if (!info.instance.equals(instance)) {
+        doomed.add(info.instance);
+        updates.add(instance);
+        current.put(server, new TServerInfo(instance, new TServerConnection(addr)));
+      }
+    }
+  }
+  
   @Override
   public void process(WatchedEvent event) {
-    scanServers();
+    
+    // its important that these event are propagated by ZooCache, because this ensures when reading zoocache that is has already processed the event and cleared
+    // relevant nodes before code below reads from zoocache
+    
+    if (event.getPath() != null) {
+      if (event.getPath().endsWith(Constants.ZTSERVERS)) {
+        scanServers();
+      } else if (event.getPath().contains(Constants.ZTSERVERS)) {
+        int pos = event.getPath().lastIndexOf('/');
+        
+        // do only if ZTSERVER is parent
+        if (pos >= 0 && event.getPath().substring(0, pos).endsWith(Constants.ZTSERVERS)) {
+          
+          String server = event.getPath().substring(pos + 1);
+          
+          final Set<TServerInstance> updates = new HashSet<TServerInstance>();
+          final Set<TServerInstance> doomed = new HashSet<TServerInstance>();
+          
+          final String path = ZooUtil.getRoot(instance) + Constants.ZTSERVERS;
+          
+          try {
+            checkServer(updates, doomed, path, server);
+            if (!doomed.isEmpty() || !updates.isEmpty())
+              this.cback.update(this, doomed, updates);
+          } catch (Exception ex) {
+            log.error(ex, ex);
+          }
+        }
+      }
+    }
   }
   
   public synchronized TServerConnection getConnection(TServerInstance server) throws TException {
-    TServerConnection result;
-    synchronized (this) {
-      if (server == null)
-        return null;
-      TServerInfo serverInfo = current.get(server.hostPort());
-      // lock was lost?
-      if (serverInfo == null)
-        return null;
-      // instance changed?
-      if (!serverInfo.instance.equals(server))
-        return null;
-      result = serverInfo.connection;
-    }
+    if (server == null)
+      return null;
+    TServerInfo serverInfo = current.get(server.hostPort());
+    // lock was lost?
+    if (serverInfo == null)
+      return null;
+    // instance changed?
+    if (!serverInfo.instance.equals(server))
+      return null;
+    TServerConnection result = serverInfo.connection;
     return result;
   }
   
@@ -337,14 +375,8 @@ public class LiveTServerSet implements Watcher {
   }
   
   public synchronized void remove(TServerInstance server) {
-    TServerInfo remove = current.remove(server.hostPort());
-    if (remove != null) {
-      try {
-        remove.cleanup();
-      } catch (Exception e) {
-        log.info("error cleaning up connection to server", e);
-      }
-    }
+    current.remove(server.hostPort());
+    
     log.info("Removing zookeeper lock for " + server);
     String zpath = ZooUtil.getRoot(instance) + Constants.ZTSERVERS + "/" + server.hostPort();
     try {

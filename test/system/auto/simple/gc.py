@@ -32,8 +32,8 @@ class GCTest(SunnyDayTest):
 
     settings = SunnyDayTest.settings.copy()
     settings.update({
-        'gc.cycle.start': 5,
-        'gc.cycle.delay': 15,
+        'gc.cycle.start': 1,
+        'gc.cycle.delay': 1,
         'tserver.memory.maps.max':'5K',
         'tserver.compaction.major.delay': 1,
         })
@@ -58,13 +58,12 @@ class GCTest(SunnyDayTest):
             count = update
 
     def runTest(self):
-        self.waitForStop(self.ingester, 60)
-        self.shell(self.masterHost(), 'flush -t test_ingest')
         self.stop_gc(self.masterHost())
+        self.waitForStop(self.ingester, 60)
+        self.shell(self.masterHost(), 'flush -t test_ingest -w')
 
         count = self.waitForFileCountToStabilize()
-        gc = self.runOn(self.masterHost(),
-                        [self.accumulo_sh(), 'gc'])
+        gc = self.runOn(self.masterHost(), [self.accumulo_sh(), 'gc'])
         self.sleep(10)
         collected = self.fileCount()
         self.assert_(count > collected)
@@ -74,7 +73,7 @@ class GCTest(SunnyDayTest):
                             glob.glob(os.path.join(ACCUMULO_HOME,'logs',ID,'gc_*')))
         out, err = handle.communicate()
         self.assert_(handle.returncode != 0)
-        self.pkill(self.masterHost(), 'java.*Main gc$', signal.SIGHUP)
+        self.pkill(self.masterHost(), 'app=gc', signal.SIGHUP)
         self.wait(gc)
         log.info("Verifying Ingestion")
         self.waitForStop(self.verify(self.masterHost(), self.options.rows),
@@ -86,24 +85,25 @@ class GCLotsOfCandidatesTest(TestUtilsMixin, unittest.TestCase):
     order = GCTest.order + 1
     settings = SunnyDayTest.settings.copy()
     settings.update({
-        'gc.cycle.start': 5,
-        'gc.cycle.delay': 15
+        'gc.cycle.start': 1,
+        'gc.cycle.delay': 1
         })
 
     def runTest(self):
         self.stop_gc(self.masterHost())
         log.info("Filling !METADATA table with bogus delete flags")
         prep = self.runOn(self.masterHost(),
-                        [self.accumulo_sh(), 'org.apache.accumulo.server.test.GCLotsOfCandidatesTest',
-                         INSTANCE_NAME,ZOOKEEPERS,ROOT,ROOT_PASSWORD])
+                        [self.accumulo_sh(), 
+                         'org.apache.accumulo.test.GCLotsOfCandidatesTest',
+                         '-i',INSTANCE_NAME,'-z', ZOOKEEPERS,'-u', ROOT, '-p', ROOT_PASSWORD])
         out, err = prep.communicate()
         self.assert_(prep.returncode == 0)
 
         log.info("Running GC with low memory allotment")
         gc = self.runOn('localhost',
-                        ['bash', '-c', 'ACCUMULO_GC_OPTS="-Xmx7m " ' + self.accumulo_sh() + ' gc'])
-        self.sleep(20)
-        self.pkill('localhost', 'java.*Main gc$', signal.SIGHUP)
+                        ['bash', '-c', 'ACCUMULO_GC_OPTS="-Xmx10m " ' + self.accumulo_sh() + ' gc'])
+        self.sleep(10)
+        self.pkill('localhost', 'app=gc', signal.SIGHUP)
         self.wait(gc)
 
         log.info("Verifying GC ran out of memory and cycled instead of giving up")

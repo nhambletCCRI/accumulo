@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit;
 public class SimpleThreadPool extends ThreadPoolExecutor {
   
   public SimpleThreadPool(int max, final String name) {
-    super(max, max, 1l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), new NamingThreadFactory(name));
+    super(max, max, 4l, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), new NamingThreadFactory(name));
     allowCoreThreadTimeOut(true);
   }
   

@@ -16,110 +16,159 @@
  */
 package org.apache.accumulo.server.util;
 
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import jline.ConsoleReader;
-
-import org.apache.accumulo.cloudtrace.instrument.Tracer;
+import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
+import org.apache.accumulo.core.client.Connector;
+import org.apache.accumulo.core.client.Instance;
+import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.client.impl.ClientExec;
 import org.apache.accumulo.core.client.impl.MasterClient;
-import org.apache.accumulo.core.conf.Property;
+import org.apache.accumulo.core.client.security.tokens.AuthenticationToken;
 import org.apache.accumulo.core.master.thrift.MasterClientService;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
+import org.apache.accumulo.core.security.CredentialHelper;
+import org.apache.accumulo.core.security.thrift.TCredentials;
+import org.apache.accumulo.server.cli.ClientOpts;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.security.SecurityConstants;
-import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
+import org.apache.accumulo.trace.instrument.Tracer;
 import org.apache.log4j.Logger;
+
+import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
+import com.beust.jcommander.Parameters;
 
 public class Admin {
   private static final Logger log = Logger.getLogger(Admin.class);
   
+  static class AdminOpts extends ClientOpts {
+    @Parameter(names = {"-f", "--force"}, description = "force the given server to stop by removing its lock")
+    boolean force = false;
+  }
+  
+  @Parameters(commandDescription = "stop the tablet server on the given hosts")
+  static class StopCommand {
+    @Parameter(description = "<host> {<host> ... }")
+    List<String> args = new ArrayList<String>();
+  }
+  
+  @Parameters(commandDescription = "stop the master")
+  static class StopMasterCommand {}
+  
+  @Parameters(commandDescription = "stop all the servers")
+  static class StopAllCommand {}
+  
   public static void main(String[] args) {
     boolean everything;
     
-    CommandLine cl = null;
-    Options opts = new Options();
-    opts.addOption("u", true, "optional administrator user name");
-    opts.addOption("p", true, "optional administrator password");
-    opts.addOption("f", "force", false, "force the given server to stop by removing its lock");
-    opts.addOption("?", "help", false, "displays the help");
-    String user = null;
-    byte[] pass = null;
-    boolean force = false;
+    AdminOpts opts = new AdminOpts();
+    JCommander cl = new JCommander(opts);
+    cl.setProgramName(Admin.class.getName());
+    StopCommand stopOpts = new StopCommand();
+    cl.addCommand("stop", stopOpts);
+    StopMasterCommand stopMasterOpts = new StopMasterCommand();
+    cl.addCommand("stopMaster", stopMasterOpts);
+    StopAllCommand stopAllOpts = new StopAllCommand();
+    cl.addCommand("stopAll", stopAllOpts);
+    cl.parse(args);
     
-    try {
-      cl = new BasicParser().parse(opts, args);
-      if (cl.hasOption("?"))
-        throw new ParseException("help requested");
-      args = cl.getArgs();
-      
-      user = cl.hasOption("u") ? cl.getOptionValue("u") : "root";
-      pass = cl.hasOption("p") ? cl.getOptionValue("p").getBytes() : null;
-      force = cl.hasOption("f");
-      
-      if (!((cl.getArgs().length == 1 && (args[0].equalsIgnoreCase("stopMaster") || args[0].equalsIgnoreCase("stopAll"))) || (cl.getArgs().length == 2 && args[0]
-          .equalsIgnoreCase("stop"))))
-        throw new ParseException("Incorrect arguments");
-      
-    } catch (ParseException e) {
-      // print to the log and to stderr
-      if (cl == null || !cl.hasOption("?"))
-        log.error(e, e);
-      HelpFormatter h = new HelpFormatter();
-      StringWriter str = new StringWriter();
-      h.printHelp(new PrintWriter(str), h.getWidth(), Admin.class.getName() + " stopMaster | stopAll | stop <tserver>", null, opts, h.getLeftPadding(),
-          h.getDescPadding(), null, true);
-      if (cl != null && cl.hasOption("?"))
-        log.info(str.toString());
-      else
-        log.error(str.toString());
-      h.printHelp(new PrintWriter(System.err), h.getWidth(), Admin.class.getName() + " stopMaster | stopAll | stop <tserver>", null, opts, h.getLeftPadding(),
-          h.getDescPadding(), null, true);
-      System.exit(3);
+    if (opts.help || cl.getParsedCommand() == null) {
+      cl.usage();
+      return;
     }
+    Instance instance = opts.getInstance();
     
     try {
-      AuthInfo creds;
-      if (args[0].equalsIgnoreCase("stop")) {
-        stopTabletServer(args[1], force);
+      String principal;
+      AuthenticationToken token;
+      if (opts.getToken() == null) {
+        principal = SecurityConstants.getSystemPrincipal();
+        token = SecurityConstants.getSystemToken();
       } else {
-        if (!cl.hasOption("u") && !cl.hasOption("p")) {
-          creds = SecurityConstants.getSystemCredentials();
-        } else {
-          if (pass == null) {
-            try {
-              pass = new ConsoleReader().readLine("Enter current password for '" + user + "': ", '*').getBytes();
-            } catch (IOException ioe) {
-              log.error("Password not specified and unable to prompt: " + ioe);
-              System.exit(4);
-            }
-          }
-          creds = new AuthInfo(user, ByteBuffer.wrap(pass), HdfsZooInstance.getInstance().getInstanceID());
-        }
+        principal = opts.principal;
+        token = opts.getToken();
+      }
+      
+      if (cl.getParsedCommand().equals("stop")) {
+        stopTabletServer(instance, CredentialHelper.create(principal, token, instance.getInstanceID()), stopOpts.args, opts.force);
+      } else {
+        everything = cl.getParsedCommand().equals("stopAll");
         
-        everything = args[0].equalsIgnoreCase("stopAll");
-        stopServer(creds, everything);
+        if (everything)
+          flushAll(instance, principal, token);
+        
+        stopServer(instance, CredentialHelper.create(principal, token, instance.getInstanceID()), everything);
       }
     } catch (AccumuloException e) {
-      log.error(e);
+      log.error(e, e);
       System.exit(1);
     } catch (AccumuloSecurityException e) {
-      log.error(e);
+      log.error(e, e);
       System.exit(2);
     }
   }
   
-  private static void stopServer(final AuthInfo credentials, final boolean tabletServersToo) throws AccumuloException, AccumuloSecurityException {
+  /**
+   * flushing during shutdown is a perfomance optimization, its not required. The method will make an attempt to initiate flushes of all tables and give up if
+   * it takes too long.
+   * 
+   */
+  private static void flushAll(final Instance instance, final String principal, final AuthenticationToken token) throws AccumuloException,
+      AccumuloSecurityException {
+    
+    final AtomicInteger flushesStarted = new AtomicInteger(0);
+    
+    Runnable flushTask = new Runnable() {
+      
+      @Override
+      public void run() {
+        try {
+          Connector conn = instance.getConnector(principal, token);
+          Set<String> tables = conn.tableOperations().tableIdMap().keySet();
+          for (String table : tables) {
+            if (table.equals(Constants.METADATA_TABLE_NAME))
+              continue;
+            try {
+              conn.tableOperations().flush(table, null, null, false);
+              flushesStarted.incrementAndGet();
+            } catch (TableNotFoundException e) {}
+          }
+        } catch (Exception e) {
+          log.warn("Failed to intiate flush " + e.getMessage());
+        }
+      }
+    };
+    
+    Thread flusher = new Thread(flushTask);
+    flusher.setDaemon(true);
+    flusher.start();
+    
+    long start = System.currentTimeMillis();
+    try {
+      flusher.join(3000);
+    } catch (InterruptedException e) {}
+    
+    while (flusher.isAlive() && System.currentTimeMillis() - start < 15000) {
+      int flushCount = flushesStarted.get();
+      try {
+        flusher.join(1000);
+      } catch (InterruptedException e) {}
+      
+      if (flushCount == flushesStarted.get()) {
+        // no progress was made while waiting for join... maybe its stuck, stop waiting on it
+        break;
+      }
+    }
+  }
+  
+  private static void stopServer(Instance instance, final TCredentials credentials, final boolean tabletServersToo) throws AccumuloException,
+      AccumuloSecurityException {
     MasterClient.execute(HdfsZooInstance.getInstance(), new ClientExec<MasterClientService.Client>() {
       @Override
       public void execute(MasterClientService.Client client) throws Exception {
@@ -128,14 +177,18 @@ public class Admin {
     });
   }
   
-  private static void stopTabletServer(String server, final boolean force) throws AccumuloException, AccumuloSecurityException {
-    InetSocketAddress address = AddressUtil.parseAddress(server, Property.TSERV_CLIENTPORT);
-    final String finalServer = org.apache.accumulo.core.util.AddressUtil.toString(address);
-    MasterClient.execute(HdfsZooInstance.getInstance(), new ClientExec<MasterClientService.Client>() {
-      @Override
-      public void execute(MasterClientService.Client client) throws Exception {
-        client.shutdownTabletServer(Tracer.traceInfo(), SecurityConstants.getSystemCredentials(), finalServer, force);
-      }
-    });
+  private static void stopTabletServer(Instance instance, final TCredentials creds, List<String> servers, final boolean force) throws AccumuloException,
+      AccumuloSecurityException {
+    for (String server : servers) {
+      InetSocketAddress address = AddressUtil.parseAddress(server);
+      final String finalServer = org.apache.accumulo.core.util.AddressUtil.toString(address);
+      log.info("Stopping server " + finalServer);
+      MasterClient.execute(HdfsZooInstance.getInstance(), new ClientExec<MasterClientService.Client>() {
+        @Override
+        public void execute(MasterClientService.Client client) throws Exception {
+          client.shutdownTabletServer(Tracer.traceInfo(), creds, finalServer, force);
+        }
+      });
+    }
   }
 }

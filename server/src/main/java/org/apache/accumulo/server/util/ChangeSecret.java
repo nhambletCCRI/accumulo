@@ -18,6 +18,7 @@ package org.apache.accumulo.server.util;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,7 +30,7 @@ import org.apache.accumulo.fate.zookeeper.ZooReader;
 import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeExistsPolicy;
 import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeMissingPolicy;
 import org.apache.accumulo.server.ServerConstants;
-import org.apache.accumulo.server.client.HdfsZooInstance;
+import org.apache.accumulo.server.cli.ClientOpts;
 import org.apache.accumulo.server.zookeeper.ZooReaderWriter;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -37,26 +38,32 @@ import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.data.ACL;
 import org.apache.zookeeper.data.Stat;
 
+import com.beust.jcommander.Parameter;
+
 public class ChangeSecret {
   
+  static class Opts extends ClientOpts {
+    @Parameter(names="--old", description="old zookeeper password", password=true, hidden=true)
+    String oldPass;
+    @Parameter(names="--new", description="new zookeeper password", password=true, hidden=true)
+    String newPass;
+  }
+  
   public static void main(String[] args) throws Exception {
-    String oldPass = null;
-    String newPass = null;
-    if (args.length < 2) {
-      System.err.println("Usage: accumulo " + ChangeSecret.class.getName() + " oldPass newPass");
-      System.exit(-1);
-    }
-    oldPass = args[0];
-    newPass = args[1];
-    
+    Opts opts = new Opts();
+    List<String> argsList = new ArrayList<String>(args.length + 2);
+    argsList.add("--old");
+    argsList.add("--new");
+    argsList.addAll(Arrays.asList(args));
+    opts.parseArgs(ChangeSecret.class.getName(), argsList.toArray(new String[0]));
     FileSystem fs = FileSystem.get(CachedConfiguration.getInstance());
-    Instance inst = HdfsZooInstance.getInstance();
-    if (!verifyAccumuloIsDown(inst, oldPass))
+    Instance inst = opts.getInstance();
+    if (!verifyAccumuloIsDown(inst, opts.oldPass))
       System.exit(-1);
-    String instanceId = rewriteZooKeeperInstance(inst, oldPass, newPass);
+    String instanceId = rewriteZooKeeperInstance(inst, opts.oldPass, opts.newPass);
     updateHdfs(fs, inst, instanceId);
-    if (oldPass != null) {
-      deleteInstance(inst, oldPass);
+    if (opts.oldPass != null) {
+      deleteInstance(inst, opts.oldPass);
     }
     System.out.println("New instance id is " + instanceId);
     System.out.println("Be sure to put your new secret in accumulo-site.xml");
@@ -113,7 +120,7 @@ public class ChangeSecret {
           new_.putPersistentData(newPath, data, NodeExistsPolicy.FAIL);
         } else {
           // upgrade
-          if (acls.contains(Ids.OPEN_ACL_UNSAFE)) {
+          if (acls.containsAll(Ids.OPEN_ACL_UNSAFE)) {
             // make user nodes private, they contain the user's password
             String parts[] = path.split("/");
             if (parts[parts.length - 2].equals("users")) {

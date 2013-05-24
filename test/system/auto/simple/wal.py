@@ -18,7 +18,7 @@ import os
 import unittest
 import logging
 from simple.readwrite import SunnyDayTest
-from TestUtils import WALOG, ACCUMULO_HOME
+from TestUtils import ACCUMULO_HOME
 
 log = logging.getLogger('test.auto')
 
@@ -32,6 +32,7 @@ class WriteAheadLog(SunnyDayTest):
      settings['tserver.walog.max.size'] = '2M'
      settings['gc.cycle.delay'] = 1
      settings['gc.cycle.start'] = 1
+     settings['master.recovery.delay'] = 0
 
      # compact frequently
      settings['tserver.memory.maps.max'] = '200K'

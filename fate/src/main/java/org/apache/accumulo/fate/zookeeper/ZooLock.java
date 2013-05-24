@@ -43,6 +43,13 @@ public class ZooLock implements Watcher {
   
   public interface LockWatcher {
     void lostLock(LockLossReason reason);
+    
+    /**
+     * lost the ability to monitor the lock node, and its status is unknown
+     * 
+     * @param e
+     */
+    void unableToMonitorLockNode(Throwable e);
   }
   
   public interface AsyncLockWatcher extends LockWatcher {
@@ -56,11 +63,11 @@ public class ZooLock implements Watcher {
   protected final IZooReaderWriter zooKeeper;
   private String lock;
   private LockWatcher lockWatcher;
-  
+  private boolean watchingParent = false;
   private String asyncLock;
   
-  public ZooLock(String zookeepers, int timeInMillis, String auth, String path) {
-    this(new ZooCache(zookeepers, timeInMillis), ZooReaderWriter.getInstance(zookeepers, timeInMillis, auth), path);
+  public ZooLock(String zookeepers, int timeInMillis, String scheme, byte[] auth, String path) {
+    this(new ZooCache(zookeepers, timeInMillis), ZooReaderWriter.getInstance(zookeepers, timeInMillis, scheme, auth), path);
   }
   
   protected ZooLock(ZooCache zc, IZooReaderWriter zrw, String path) {
@@ -69,8 +76,10 @@ public class ZooLock implements Watcher {
     zooKeeper = zrw;
     try {
       zooKeeper.getStatus(path, this);
+      watchingParent = true;
     } catch (Exception ex) {
       log.warn("Error getting setting initial watch on ZooLock", ex);
+      throw new RuntimeException(ex);
     }
   }
   
@@ -94,6 +103,11 @@ public class ZooLock implements Watcher {
     @Override
     public void lostLock(LockLossReason reason) {
       lw.lostLock(reason);
+    }
+    
+    @Override
+    public void unableToMonitorLockNode(Throwable e) {
+      lw.unableToMonitorLockNode(e);
     }
     
   }
@@ -131,6 +145,9 @@ public class ZooLock implements Watcher {
     Collections.sort(children);
     
     if (children.get(0).equals(myLock)) {
+      if (!watchingParent) {
+        throw new IllegalStateException("Can not acquire lock, no longer watching parent : " + path);
+      }
       this.lockWatcher = lw;
       this.lock = myLock;
       asyncLock = null;
@@ -170,7 +187,7 @@ public class ZooLock implements Watcher {
             }
           }
         }
-        
+
         if (event.getState() == KeeperState.Expired) {
           synchronized (ZooLock.this) {
             if (lock == null) {
@@ -186,6 +203,14 @@ public class ZooLock implements Watcher {
       lockAsync(myLock, lw);
   }
   
+  private void lostLock(LockLossReason reason) {
+    LockWatcher localLw = lockWatcher;
+    lock = null;
+    lockWatcher = null;
+    
+    localLw.lostLock(reason);
+  }
+
   public synchronized void lockAsync(final AsyncLockWatcher lw, byte data[]) {
     
     if (lockWatcher != null || lock != null || asyncLock != null) {
@@ -195,22 +220,37 @@ public class ZooLock implements Watcher {
     lockWasAcquired = false;
     
     try {
-      String asyncLockPath = zooKeeper.putEphemeralSequential(path + "/" + LOCK_PREFIX, data);
+      final String asyncLockPath = zooKeeper.putEphemeralSequential(path + "/" + LOCK_PREFIX, data);
       
       Stat stat = zooKeeper.getStatus(asyncLockPath, new Watcher() {
+        
+        private void failedToAcquireLock(){
+          lw.failedToAcquireLock(new Exception("Lock deleted before acquired"));
+          asyncLock = null;
+        }
+        
         public void process(WatchedEvent event) {
           synchronized (ZooLock.this) {
             if (lock != null && event.getType() == EventType.NodeDeleted && event.getPath().equals(path + "/" + lock)) {
-              LockWatcher localLw = lockWatcher;
-              lock = null;
-              lockWatcher = null;
-              
-              localLw.lostLock(LockLossReason.LOCK_DELETED);
-              
+              lostLock(LockLossReason.LOCK_DELETED);
             } else if (asyncLock != null && event.getType() == EventType.NodeDeleted && event.getPath().equals(path + "/" + asyncLock)) {
-              lw.failedToAcquireLock(new Exception("Lock deleted before acquired"));
-              asyncLock = null;
+              failedToAcquireLock();
+            } else if (event.getState() != KeeperState.Expired && (lock != null || asyncLock != null)) {
+              log.debug("Unexpected event watching lock node "+event+" "+asyncLockPath);
+              try {
+                Stat stat2 = zooKeeper.getStatus(asyncLockPath, this);
+                if(stat2 == null){
+                  if(lock != null)
+                    lostLock(LockLossReason.LOCK_DELETED);
+                  else if(asyncLock != null)
+                    failedToAcquireLock();
+                }
+              } catch (Throwable e) {
+                lockWatcher.unableToMonitorLockNode(e);
+                log.error("Failed to stat lock node " + asyncLockPath, e);
+              }
             }
+           
           }
         }
       });
@@ -298,12 +338,26 @@ public class ZooLock implements Watcher {
   public synchronized void process(WatchedEvent event) {
     log.debug("event " + event.getPath() + " " + event.getType() + " " + event.getState());
     
+    watchingParent = false;
+
     if (event.getState() == KeeperState.Expired && lock != null) {
-      LockWatcher localLw = lockWatcher;
-      lock = null;
-      lockWatcher = null;
-      localLw.lostLock(LockLossReason.SESSION_EXPIRED);
+      if (lock != null) {
+        lostLock(LockLossReason.SESSION_EXPIRED);
+      }
+    } else {
+      
+      try { // set the watch on the parent node again
+        zooKeeper.getStatus(path, this);
+        watchingParent = true;
+      } catch (Exception ex) {
+        if (lock != null || asyncLock != null) {
+          lockWatcher.unableToMonitorLockNode(ex);
+          log.error("Error resetting watch on ZooLock " + lock == null ? asyncLock : lock + " " + event, ex);
+        }
+      }
+       
     }
+
   }
   
   public static boolean isLockHeld(ZooKeeper zk, LockID lid) throws KeeperException, InterruptedException {

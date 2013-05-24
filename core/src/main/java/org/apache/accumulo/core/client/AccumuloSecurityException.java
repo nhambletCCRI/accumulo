@@ -16,8 +16,9 @@
  */
 package org.apache.accumulo.core.client;
 
-import org.apache.accumulo.core.security.thrift.SecurityErrorCode;
-import org.apache.accumulo.core.security.thrift.ThriftSecurityException;
+import org.apache.accumulo.core.client.impl.thrift.SecurityErrorCode;
+import org.apache.accumulo.core.client.impl.thrift.ThriftSecurityException;
+import org.apache.commons.lang.StringUtils;
 
 /**
  * An Accumulo Exception for security violations, authentication failures, authorization failures, etc.
@@ -26,7 +27,7 @@ import org.apache.accumulo.core.security.thrift.ThriftSecurityException;
 public class AccumuloSecurityException extends Exception {
   private static final long serialVersionUID = 1L;
   
-  private static String getDefaultErrorMessage(SecurityErrorCode errorcode) {
+  private static String getDefaultErrorMessage(final SecurityErrorCode errorcode) {
     switch (errorcode) {
       case BAD_CREDENTIALS:
         return "Username or Password is Invalid";
@@ -42,6 +43,20 @@ public class AccumuloSecurityException extends Exception {
         return "The GRANT permission cannot be granted or revoked";
       case BAD_AUTHORIZATIONS:
         return "The user does not have the specified authorizations assigned";
+      case UNSUPPORTED_OPERATION:
+        return "The configured security handler does not support this operation";
+      case INVALID_TOKEN:
+        return "The configured authenticator does not accept this type of token";
+      case AUTHENTICATOR_FAILED:
+        return "The configured authenticator failed for some reason";
+      case AUTHORIZOR_FAILED:
+        return "The configured authorizor failed for some reason";
+      case PERMISSIONHANDLER_FAILED:
+        return "The configured permission handler failed for some reason";
+      case TOKEN_EXPIRED:
+        return "The supplied token expired, please update and try again";
+      case INSUFFICIENT_PROPERTIES:
+        return "The login properties supplied are not sufficient for authentication. Please check the requested properties and try again";
       case DEFAULT_SECURITY_ERROR:
       default:
         return "Unknown security exception";
@@ -49,6 +64,7 @@ public class AccumuloSecurityException extends Exception {
   }
   
   private String user;
+  private String tableInfo;
   private SecurityErrorCode errorCode;
   
   /**
@@ -66,7 +82,7 @@ public class AccumuloSecurityException extends Exception {
    * @param cause
    *          the exception that caused this violation
    */
-  public AccumuloSecurityException(String user, SecurityErrorCode errorcode, Throwable cause) {
+  public AccumuloSecurityException(final String user, final SecurityErrorCode errorcode, final Throwable cause) {
     super(getDefaultErrorMessage(errorcode), cause);
     this.user = user;
     this.errorCode = errorcode == null ? SecurityErrorCode.DEFAULT_SECURITY_ERROR : errorcode;
@@ -77,11 +93,43 @@ public class AccumuloSecurityException extends Exception {
    *          the relevant user for the security violation
    * @param errorcode
    *          the specific reason for this exception
+   * @param tableInfo
+   *          the relevant tableInfo for the security violation 
+   * @param cause
+   *          the exception that caused this violation
    */
-  public AccumuloSecurityException(String user, SecurityErrorCode errorcode) {
+  public AccumuloSecurityException(final String user, final SecurityErrorCode errorcode, final String tableInfo, final Throwable cause) {
+    super(getDefaultErrorMessage(errorcode), cause);
+    this.user = user;
+    this.errorCode = errorcode == null ? SecurityErrorCode.DEFAULT_SECURITY_ERROR : errorcode;
+    this.tableInfo = tableInfo;
+  }
+  
+  /**
+   * @param user
+   *          the relevant user for the security violation
+   * @param errorcode
+   *          the specific reason for this exception
+   */
+  public AccumuloSecurityException(final String user, final SecurityErrorCode errorcode) {
     super(getDefaultErrorMessage(errorcode));
     this.user = user;
     this.errorCode = errorcode == null ? SecurityErrorCode.DEFAULT_SECURITY_ERROR : errorcode;
+  }
+  
+  /**
+   * @param user
+   *          the relevant user for the security violation
+   * @param errorcode
+   *          the specific reason for this exception
+   * @param tableInfo
+   *          the relevant tableInfo for the security violation 
+   */
+  public AccumuloSecurityException(final String user, final SecurityErrorCode errorcode, final String tableInfo) {
+    super(getDefaultErrorMessage(errorcode));
+    this.user = user;
+    this.errorCode = errorcode == null ? SecurityErrorCode.DEFAULT_SECURITY_ERROR : errorcode;
+    this.tableInfo = tableInfo;
   }
   
   /**
@@ -91,14 +139,47 @@ public class AccumuloSecurityException extends Exception {
     return user;
   }
   
+  public void setUser(String s) {
+    this.user = s;
+  }
+  
+  /**
+   * @return the relevant tableInfo for the security violation
+   */
+  public String getTableInfo() {
+    return tableInfo;
+  }
+  
+  public void setTableInfo(String tableInfo) {
+    this.tableInfo = tableInfo;
+  }
+  
   /**
    * @return the specific reason for this exception
+   * @since 1.5.0
    */
-  public SecurityErrorCode getErrorCode() {
-    return errorCode;
+
+  public org.apache.accumulo.core.client.security.SecurityErrorCode getSecurityErrorCode() {
+    return org.apache.accumulo.core.client.security.SecurityErrorCode.valueOf(errorCode.name());
+  }
+
+  /**
+   * @return the specific reason for this exception
+   * 
+   * @deprecated since 1.5.0; Use {@link #getSecurityErrorCode()} instead.
+   */
+  public org.apache.accumulo.core.security.thrift.SecurityErrorCode getErrorCode() {
+    return org.apache.accumulo.core.security.thrift.SecurityErrorCode.valueOf(errorCode.name());
   }
   
   public String getMessage() {
-    return "Error " + errorCode + " - " + super.getMessage();
+    StringBuilder message = new StringBuilder();
+    message.append("Error ").append(errorCode);
+    message.append(" for user ").append(user);
+    if(!StringUtils.isEmpty(tableInfo)) {
+      message.append(" on table ").append(tableInfo);
+    }
+    message.append(" - ").append(super.getMessage());
+    return message.toString();
   }
 }

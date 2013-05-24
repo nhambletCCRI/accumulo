@@ -1,8 +1,4 @@
-package org.apache.accumulo.core.data;
-
-/**
- * Copyright 2007 The Apache Software Foundation
- *
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,6 +15,7 @@ package org.apache.accumulo.core.data;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.accumulo.core.data;
 
 import static org.apache.accumulo.core.util.ByteBufferUtil.toBytes;
 
@@ -199,12 +196,13 @@ public class Value implements WritableComparable<Object> {
   
   @Override
   public String toString() {
+	String retValue = "";
     try {
-      return new String(get(), Constants.VALUE_ENCODING);
+      retValue = new String(get(), Constants.VALUE_ENCODING);
     } catch (UnsupportedEncodingException e) {
       log.error(e.toString());
-      return null;
     }
+    return retValue;
   }
   
   /**

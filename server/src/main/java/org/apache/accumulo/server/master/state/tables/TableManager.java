@@ -65,6 +65,7 @@ public class TableManager {
     zoo.putPersistentData(zTablePath + Constants.ZTABLE_STATE, state.name().getBytes(), existsPolicy);
     zoo.putPersistentData(zTablePath + Constants.ZTABLE_FLUSH_ID, "0".getBytes(), existsPolicy);
     zoo.putPersistentData(zTablePath + Constants.ZTABLE_COMPACT_ID, "0".getBytes(), existsPolicy);
+    zoo.putPersistentData(zTablePath + Constants.ZTABLE_COMPACT_CANCEL_ID, "0".getBytes(), existsPolicy);
   }
   
   public synchronized static TableManager getInstance() {
@@ -87,7 +88,7 @@ public class TableManager {
     return tableStateCache.get(tableId);
   }
   
-  public class IllegalTableTransitionException extends Exception {
+  public static class IllegalTableTransitionException extends Exception {
     private static final long serialVersionUID = 1L;
     
     final TableState oldState;

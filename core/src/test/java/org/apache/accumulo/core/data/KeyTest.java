@@ -18,6 +18,7 @@ package org.apache.accumulo.core.data;
 
 import junit.framework.TestCase;
 
+import org.apache.accumulo.core.security.ColumnVisibility;
 import org.apache.hadoop.io.Text;
 
 public class KeyTest extends TestCase {
@@ -27,8 +28,8 @@ public class KeyTest extends TestCase {
     Key k3 = new Key("r1".getBytes(), "cf".getBytes(), "cq".getBytes(), new byte[0], 0, true);
     Key k4 = new Key("r1".getBytes(), "cf".getBytes(), "cq".getBytes(), new byte[0], 0, true);
     
-    assertTrue(k1.compareTo(k2) == 0);
-    assertTrue(k3.compareTo(k4) == 0);
+    assertTrue(k1.equals(k2));
+    assertTrue(k3.equals(k4));
     assertTrue(k1.compareTo(k3) > 0);
     assertTrue(k3.compareTo(k1) < 0);
   }
@@ -96,5 +97,14 @@ public class KeyTest extends TestCase {
   public void testVisibilityFollowingKey() {
     Key k = new Key("r", "f", "q", "v");
     assertEquals(k.followingKey(PartialKey.ROW_COLFAM_COLQUAL_COLVIS).toString(), "r f:q [v%00;] " + Long.MAX_VALUE + " false");
+  }
+  
+  public void testVisibilityGetters() {
+    Key k = new Key("r", "f", "q", "v1|(v2&v3)");
+    
+    Text expression = k.getColumnVisibility();
+    ColumnVisibility parsed = k.getColumnVisibilityParsed();
+    
+    assertEquals(expression, new Text(parsed.getExpression()));
   }
 }

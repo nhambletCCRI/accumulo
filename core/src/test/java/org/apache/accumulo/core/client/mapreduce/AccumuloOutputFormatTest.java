@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -18,67 +18,164 @@ package org.apache.accumulo.core.client.mapreduce;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map.Entry;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.accumulo.core.client.BatchWriter;
+import org.apache.accumulo.core.client.BatchWriterConfig;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.client.mock.MockInstance;
+import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.security.Authorizations;
-import org.apache.accumulo.core.util.ContextFactory;
+import org.apache.accumulo.core.util.CachedConfiguration;
+import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.RecordReader;
-import org.apache.hadoop.mapreduce.RecordWriter;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
 import org.junit.Test;
 
 /**
  * 
  */
 public class AccumuloOutputFormatTest {
-  static class TestMapper extends Mapper<Key,Value,Text,Mutation> {
-    Key key = null;
-    int count = 0;
-    
-    @Override
-    protected void map(Key k, Value v, Context context) throws IOException, InterruptedException {
-      if (key != null)
-        assertEquals(key.getRow().toString(), new String(v.get()));
-      assertEquals(k.getRow(), new Text(String.format("%09x", count + 1)));
-      assertEquals(new String(v.get()), String.format("%09x", count));
-      key = new Key(k);
-      count++;
+  private static AssertionError e1 = null;
+  private static final String PREFIX = AccumuloOutputFormatTest.class.getSimpleName();
+  private static final String INSTANCE_NAME = PREFIX + "_mapreduce_instance";
+  private static final String TEST_TABLE_1 = PREFIX + "_mapreduce_table_1";
+  private static final String TEST_TABLE_2 = PREFIX + "_mapreduce_table_2";
+  
+  private static class MRTester extends Configured implements Tool {
+    private static class TestMapper extends Mapper<Key,Value,Text,Mutation> {
+      Key key = null;
+      int count = 0;
+      
+      @Override
+      protected void map(Key k, Value v, Context context) throws IOException, InterruptedException {
+        try {
+          if (key != null)
+            assertEquals(key.getRow().toString(), new String(v.get()));
+          assertEquals(k.getRow(), new Text(String.format("%09x", count + 1)));
+          assertEquals(new String(v.get()), String.format("%09x", count));
+        } catch (AssertionError e) {
+          e1 = e;
+        }
+        key = new Key(k);
+        count++;
+      }
+      
+      @Override
+      protected void cleanup(Context context) throws IOException, InterruptedException {
+        Mutation m = new Mutation("total");
+        m.put("", "", Integer.toString(count));
+        context.write(new Text(), m);
+      }
     }
     
     @Override
-    protected void cleanup(Context context) throws IOException, InterruptedException {
-      super.cleanup(context);
-      Mutation m = new Mutation("total");
-      m.put("", "", Integer.toString(count));
-      try {
-        context.write(new Text(), m);
-      } catch (NullPointerException e) {}
+    public int run(String[] args) throws Exception {
+      
+      if (args.length != 4) {
+        throw new IllegalArgumentException("Usage : " + MRTester.class.getName() + " <user> <pass> <inputtable> <outputtable>");
+      }
+      
+      String user = args[0];
+      String pass = args[1];
+      String table1 = args[2];
+      String table2 = args[3];
+      
+      Job job = new Job(getConf(), this.getClass().getSimpleName() + "_" + System.currentTimeMillis());
+      job.setJarByClass(this.getClass());
+      
+      job.setInputFormatClass(AccumuloInputFormat.class);
+      
+      AccumuloInputFormat.setConnectorInfo(job, user, new PasswordToken(pass));
+      AccumuloInputFormat.setInputTableName(job, table1);
+      AccumuloInputFormat.setMockInstance(job, INSTANCE_NAME);
+      
+      job.setMapperClass(TestMapper.class);
+      job.setMapOutputKeyClass(Key.class);
+      job.setMapOutputValueClass(Value.class);
+      job.setOutputFormatClass(AccumuloOutputFormat.class);
+      job.setOutputKeyClass(Text.class);
+      job.setOutputValueClass(Mutation.class);
+      
+      AccumuloOutputFormat.setConnectorInfo(job, user, new PasswordToken(pass));
+      AccumuloOutputFormat.setCreateTables(job, false);
+      AccumuloOutputFormat.setDefaultTableName(job, table2);
+      AccumuloOutputFormat.setMockInstance(job, INSTANCE_NAME);
+      
+      job.setNumReduceTasks(0);
+      
+      job.waitForCompletion(true);
+      
+      return job.isSuccessful() ? 0 : 1;
+    }
+    
+    public static void main(String[] args) throws Exception {
+      assertEquals(0, ToolRunner.run(CachedConfiguration.getInstance(), new MRTester(), args));
     }
   }
   
   @Test
+  public void testBWSettings() throws IOException {
+    Job job = new Job();
+    
+    // make sure we aren't testing defaults
+    final BatchWriterConfig bwDefaults = new BatchWriterConfig();
+    assertNotEquals(7654321l, bwDefaults.getMaxLatency(TimeUnit.MILLISECONDS));
+    assertNotEquals(9898989l, bwDefaults.getTimeout(TimeUnit.MILLISECONDS));
+    assertNotEquals(42, bwDefaults.getMaxWriteThreads());
+    assertNotEquals(1123581321l, bwDefaults.getMaxMemory());
+    
+    final BatchWriterConfig bwConfig = new BatchWriterConfig();
+    bwConfig.setMaxLatency(7654321l, TimeUnit.MILLISECONDS);
+    bwConfig.setTimeout(9898989l, TimeUnit.MILLISECONDS);
+    bwConfig.setMaxWriteThreads(42);
+    bwConfig.setMaxMemory(1123581321l);
+    AccumuloOutputFormat.setBatchWriterOptions(job, bwConfig);
+    
+    AccumuloOutputFormat myAOF = new AccumuloOutputFormat() {
+      @Override
+      public void checkOutputSpecs(JobContext job) throws IOException {
+        BatchWriterConfig bwOpts = getBatchWriterOptions(job);
+        
+        // passive check
+        assertEquals(bwConfig.getMaxLatency(TimeUnit.MILLISECONDS), bwOpts.getMaxLatency(TimeUnit.MILLISECONDS));
+        assertEquals(bwConfig.getTimeout(TimeUnit.MILLISECONDS), bwOpts.getTimeout(TimeUnit.MILLISECONDS));
+        assertEquals(bwConfig.getMaxWriteThreads(), bwOpts.getMaxWriteThreads());
+        assertEquals(bwConfig.getMaxMemory(), bwOpts.getMaxMemory());
+        
+        // explicit check
+        assertEquals(7654321l, bwOpts.getMaxLatency(TimeUnit.MILLISECONDS));
+        assertEquals(9898989l, bwOpts.getTimeout(TimeUnit.MILLISECONDS));
+        assertEquals(42, bwOpts.getMaxWriteThreads());
+        assertEquals(1123581321l, bwOpts.getMaxMemory());
+        
+      }
+    };
+    myAOF.checkOutputSpecs(job);
+  }
+  
+  @Test
   public void testMR() throws Exception {
-    MockInstance mockInstance = new MockInstance("testmrinstance");
-    Connector c = mockInstance.getConnector("root", new byte[] {});
-    c.tableOperations().create("testtable1");
-    c.tableOperations().create("testtable2");
-    BatchWriter bw = c.createBatchWriter("testtable1", 10000L, 1000L, 4);
+    MockInstance mockInstance = new MockInstance(INSTANCE_NAME);
+    Connector c = mockInstance.getConnector("root", new PasswordToken(""));
+    c.tableOperations().create(TEST_TABLE_1);
+    c.tableOperations().create(TEST_TABLE_2);
+    BatchWriter bw = c.createBatchWriter(TEST_TABLE_1, new BatchWriterConfig());
     for (int i = 0; i < 100; i++) {
       Mutation m = new Mutation(new Text(String.format("%09x", i + 1)));
       m.put(new Text(), new Text(), new Value(String.format("%09x", i).getBytes()));
@@ -86,36 +183,10 @@ public class AccumuloOutputFormatTest {
     }
     bw.close();
     
-    Job job = new Job();
-    job.setInputFormatClass(AccumuloInputFormat.class);
-    job.setMapperClass(TestMapper.class);
-    job.setOutputFormatClass(AccumuloOutputFormat.class);
-    job.setOutputKeyClass(Text.class);
-    job.setOutputValueClass(Mutation.class);
-    job.setNumReduceTasks(0);
-    AccumuloInputFormat.setInputInfo(job.getConfiguration(), "root", "".getBytes(), "testtable1", new Authorizations());
-    AccumuloInputFormat.setMockInstance(job.getConfiguration(), "testmrinstance");
-    AccumuloOutputFormat.setOutputInfo(job.getConfiguration(), "root", "".getBytes(), false, "testtable2");
-    AccumuloOutputFormat.setMockInstance(job.getConfiguration(), "testmrinstance");
+    MRTester.main(new String[] {"root", "", TEST_TABLE_1, TEST_TABLE_2});
+    assertNull(e1);
     
-    AccumuloInputFormat input = new AccumuloInputFormat();
-    List<InputSplit> splits = input.getSplits(job);
-    assertEquals(splits.size(), 1);
-    
-    AccumuloOutputFormat output = new AccumuloOutputFormat();
-    
-    TestMapper mapper = (TestMapper) job.getMapperClass().newInstance();
-    for (InputSplit split : splits) {
-      TaskAttemptContext tac = ContextFactory.createTaskAttemptContext(job);
-      RecordReader<Key,Value> reader = input.createRecordReader(split, tac);
-      RecordWriter<Text,Mutation> writer = output.getRecordWriter(tac);
-      Mapper<Key,Value,Text,Mutation>.Context context = ContextFactory.createMapContext(mapper, tac, reader, writer, split);
-      reader.initialize(split, context);
-      mapper.run(context);
-      writer.close(context);
-    }
-    
-    Scanner scanner = c.createScanner("testtable2", new Authorizations());
+    Scanner scanner = c.createScanner(TEST_TABLE_2, new Authorizations());
     Iterator<Entry<Key,Value>> iter = scanner.iterator();
     assertTrue(iter.hasNext());
     Entry<Key,Value> entry = iter.next();

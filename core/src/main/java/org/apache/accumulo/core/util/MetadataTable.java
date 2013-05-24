@@ -16,6 +16,7 @@
  */
 package org.apache.accumulo.core.util;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -31,14 +32,14 @@ import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.Instance;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.client.TableNotFoundException;
-import org.apache.accumulo.core.client.impl.ScannerImpl;
 import org.apache.accumulo.core.client.impl.Tables;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.PartialKey;
 import org.apache.accumulo.core.data.Range;
 import org.apache.accumulo.core.data.Value;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
+import org.apache.accumulo.core.security.CredentialHelper;
+import org.apache.accumulo.core.security.thrift.TCredentials;
 import org.apache.hadoop.io.Text;
 
 public class MetadataTable {
@@ -118,7 +119,7 @@ public class MetadataTable {
     }
   }
   
-  public static SortedMap<KeyExtent,Text> getMetadataLocationEntries(SortedMap<Key,Value> entries) {
+  public static Pair<SortedMap<KeyExtent,Text>,List<KeyExtent>> getMetadataLocationEntries(SortedMap<Key,Value> entries) {
     Key key;
     Value val;
     Text location = null;
@@ -126,6 +127,7 @@ public class MetadataTable {
     KeyExtent ke;
     
     SortedMap<KeyExtent,Text> results = new TreeMap<KeyExtent,Text>();
+    ArrayList<KeyExtent> locationless = new ArrayList<KeyExtent>();
     
     Text lastRowFromKey = new Text();
     
@@ -147,28 +149,30 @@ public class MetadataTable {
       colq = key.getColumnQualifier(colq);
       
       // interpret the row id as a key extent
-      if (colf.equals(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY) || colf.equals(Constants.METADATA_FUTURE_LOCATION_COLUMN_FAMILY))
+      if (colf.equals(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY) || colf.equals(Constants.METADATA_FUTURE_LOCATION_COLUMN_FAMILY)) {
+        if (location != null) {
+          throw new IllegalStateException("Tablet has multiple locations : " + lastRowFromKey);
+        }
         location = new Text(val.toString());
-      else if (Constants.METADATA_PREV_ROW_COLUMN.equals(colf, colq))
+      } else if (Constants.METADATA_PREV_ROW_COLUMN.equals(colf, colq)) {
         prevRow = new Value(val);
+      }
       
-      if (location != null && prevRow != null) {
+      if (prevRow != null) {
         ke = new KeyExtent(key.getRow(), prevRow);
-        results.put(ke, location);
-        
+        if (location != null)
+          results.put(ke, location);
+        else
+          locationless.add(ke);
+
         location = null;
         prevRow = null;
       }
     }
-    return results;
+    
+    return new Pair<SortedMap<KeyExtent,Text>,List<KeyExtent>>(results, locationless);
   }
-  
-  public static SortedMap<Text,SortedMap<ColumnFQ,Value>> getTabletEntries(Instance instance, KeyExtent ke, List<ColumnFQ> columns, AuthInfo credentials) {
-    TreeMap<Key,Value> tkv = new TreeMap<Key,Value>();
-    getTabletAndPrevTabletKeyValues(instance, tkv, ke, columns, credentials);
-    return getTabletEntries(tkv, columns);
-  }
-  
+
   public static SortedMap<Text,SortedMap<ColumnFQ,Value>> getTabletEntries(SortedMap<Key,Value> tabletKeyValues, List<ColumnFQ> columns) {
     TreeMap<Text,SortedMap<ColumnFQ,Value>> tabletEntries = new TreeMap<Text,SortedMap<ColumnFQ,Value>>();
     
@@ -196,47 +200,14 @@ public class MetadataTable {
     
     return tabletEntries;
   }
-  
-  public static void getTabletAndPrevTabletKeyValues(Instance instance, SortedMap<Key,Value> tkv, KeyExtent ke, List<ColumnFQ> columns, AuthInfo credentials) {
-    Text startRow;
-    Text endRow = ke.getMetadataEntry();
     
-    if (ke.getPrevEndRow() == null) {
-      startRow = new Text(KeyExtent.getMetadataEntry(ke.getTableId(), new Text()));
-    } else {
-      startRow = new Text(KeyExtent.getMetadataEntry(ke.getTableId(), ke.getPrevEndRow()));
-    }
-    
-    Scanner scanner = new ScannerImpl(instance, credentials, Constants.METADATA_TABLE_ID, Constants.NO_AUTHS);
-    
-    if (columns != null) {
-      for (ColumnFQ column : columns)
-        ColumnFQ.fetch(scanner, column);
-    }
-    
-    scanner.setRange(new Range(new Key(startRow), true, new Key(endRow).followingKey(PartialKey.ROW), false));
-    
-    tkv.clear();
-    boolean successful = false;
-    try {
-      for (Entry<Key,Value> entry : scanner) {
-        tkv.put(entry.getKey(), entry.getValue());
-      }
-      successful = true;
-    } finally {
-      if (!successful) {
-        tkv.clear();
-      }
-    }
-  }
-  
-  public static void getEntries(Instance instance, AuthInfo credentials, String table, boolean isTid, Map<KeyExtent,String> locations,
+  public static void getEntries(Instance instance, TCredentials credentials, String table, boolean isTid, Map<KeyExtent,String> locations,
       SortedSet<KeyExtent> tablets) throws AccumuloException, AccumuloSecurityException, TableNotFoundException {
     String tableId = isTid ? table : Tables.getNameToIdMap(instance).get(table);
     
-    Scanner scanner = instance.getConnector(credentials.user, credentials.password).createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS);
+    Scanner scanner = instance.getConnector(credentials.getPrincipal(), CredentialHelper.extractToken(credentials)).createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS);
     
-    ColumnFQ.fetch(scanner, Constants.METADATA_PREV_ROW_COLUMN);
+    Constants.METADATA_PREV_ROW_COLUMN.fetch(scanner);
     scanner.fetchColumnFamily(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY);
     
     // position at first entry in metadata table for given table

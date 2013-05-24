@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -33,8 +33,13 @@ public abstract class ShellOptions {
   public static final String helpLongOption = "help";
   
   final Options opts = new Options();
+  
   final Option usernameOption = new Option("u", "user", true, "username (defaults to your OS user)");
   final Option passwOption = new Option("p", "password", true, "password (prompt for password if this option is missing)");
+  final Option tokenOption = new Option("tc", "tokenClass", true, "token type to create, use the -l to pass options");
+  final Option loginOption = new Option("l", "tokenProperty", true,
+      "login properties in the format key=value. Reuse -l for each property and/or comma seperate (prompt for properties if this option is missing");
+  
   final Option tabCompleteOption = new Option(null, "disable-tab-completion", false, "disables tab completion (for less overhead when scripting)");
   final Option debugOption = new Option(null, "debug", false, "enables client debugging");
   final Option fakeOption = new Option(null, "fake", false, "fake a connection to accumulo");
@@ -57,6 +62,8 @@ public abstract class ShellOptions {
     
     passwOption.setArgName("pass");
     opts.addOption(passwOption);
+    opts.addOption(loginOption);
+    opts.addOption(tokenOption);
     
     opts.addOption(tabCompleteOption);
     

@@ -16,7 +16,9 @@
  */
 package org.apache.accumulo.core.conf;
 
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.accumulo.core.client.AccumuloException;
@@ -39,6 +41,25 @@ public abstract class AccumuloConfiguration implements Iterable<Entry<String,Str
       log.error(msg, err);
       throw err;
     }
+  }
+  
+  /**
+   * This method returns all properties in a map of string->string under the given prefix property.
+   * @param property the prefix property, and must be of type PropertyType.PREFIX
+   * @return a map of strings to strings of the resulting properties
+   */
+  public Map<String, String> getAllPropertiesWithPrefix(Property property) {
+    checkType(property, PropertyType.PREFIX);
+    
+    Map<String, String> propMap = new HashMap<String, String>(); 
+    
+    for (Entry<String, String> entry : this) {
+      if (entry.getKey().startsWith(property.getKey())) {
+        propMap.put(entry.getKey(), entry.getValue());
+      }
+    }
+    
+    return propMap;
   }
   
   public long getMemoryInBytes(Property property) {
@@ -137,6 +158,7 @@ public abstract class AccumuloConfiguration implements Iterable<Entry<String,Str
    * 
    * @deprecated not for client use
    */
+  @Deprecated
   public static synchronized AccumuloConfiguration getSiteConfiguration() {
     return SiteConfiguration.getInstance(getDefaultConfiguration());
   }
@@ -154,5 +176,9 @@ public abstract class AccumuloConfiguration implements Iterable<Entry<String,Str
     }
     
     return maxFilesPerTablet;
+  }
+  
+  public void invalidateCache() {
+    // overridden in ZooConfiguration
   }
 }

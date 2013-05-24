@@ -16,6 +16,10 @@
  */
 package org.apache.accumulo.core.file.rfile;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -24,11 +28,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Random;
 import java.util.Set;
-
-import junit.framework.TestCase;
 
 import org.apache.accumulo.core.data.ArrayByteSequence;
 import org.apache.accumulo.core.data.ByteSequence;
@@ -37,6 +41,7 @@ import org.apache.accumulo.core.data.PartialKey;
 import org.apache.accumulo.core.data.Range;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.file.FileSKVIterator;
+import org.apache.accumulo.core.file.blockfile.cache.LruBlockCache;
 import org.apache.accumulo.core.file.blockfile.impl.CachableBlockFile;
 import org.apache.accumulo.core.file.rfile.RFile.Reader;
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator;
@@ -51,8 +56,9 @@ import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.junit.Test;
 
-public class RFileTest extends TestCase {
+public class RFileTest {
   
   private static final Collection<ByteSequence> EMPTY_COL_FAMS = new ArrayList<ByteSequence>();
   
@@ -136,7 +142,7 @@ public class RFileTest extends TestCase {
         
       }
       
-      if (reader.getLastKey().compareTo(lastKey) != 0) {
+      if (!reader.getLastKey().equals(lastKey)) {
         throw new RuntimeException("Last key out of order " + reader.getLastKey() + " " + lastKey);
       }
     }
@@ -177,7 +183,11 @@ public class RFileTest extends TestCase {
       byte[] data = baos.toByteArray();
       bais = new SeekableByteArrayInputStream(data);
       in = new FSDataInputStream(bais);
-      CachableBlockFile.Reader _cbr = new CachableBlockFile.Reader(in, data.length, conf);
+      
+      LruBlockCache indexCache = new LruBlockCache(100000000, 100000);
+      LruBlockCache dataCache = new LruBlockCache(100000000, 100000);
+      
+      CachableBlockFile.Reader _cbr = new CachableBlockFile.Reader(in, data.length, conf, dataCache, indexCache);
       reader = new RFile.Reader(_cbr);
       iter = new ColumnFamilySkippingIterator(reader);
       
@@ -194,18 +204,19 @@ public class RFileTest extends TestCase {
     }
   }
   
-  private Key nk(String row, String cf, String cq, String cv, long ts) {
+  static Key nk(String row, String cf, String cq, String cv, long ts) {
     return new Key(row.getBytes(), cf.getBytes(), cq.getBytes(), cv.getBytes(), ts);
   }
   
-  private Value nv(String val) {
+  static Value nv(String val) {
     return new Value(val.getBytes());
   }
   
-  private String nf(String prefix, int i) {
+  static String nf(String prefix, int i) {
     return String.format(prefix + "%06d", i);
   }
   
+  @Test
   public void test1() throws IOException {
     
     // test an emprt file
@@ -224,6 +235,7 @@ public class RFileTest extends TestCase {
     trf.closeReader();
   }
   
+  @Test
   public void test2() throws IOException {
     
     // test an rfile with one entry
@@ -260,6 +272,7 @@ public class RFileTest extends TestCase {
     trf.closeReader();
   }
   
+  @Test
   public void test3() throws IOException {
     
     // test an rfile with multiple rows having multiple columns
@@ -301,10 +314,10 @@ public class RFileTest extends TestCase {
         }
       }
     }
-    
+		
     // trf.writer.append(nk("r1","cf1","cq1","L1", 55), nv("foo"));
     trf.closeWriter();
-    
+
     trf.openReader();
     // seek before everything
     trf.iter.seek(new Range((Key) null, null), EMPTY_COL_FAMS, false);
@@ -384,6 +397,20 @@ public class RFileTest extends TestCase {
     
     assertEquals(expectedKeys.get(expectedKeys.size() - 1), trf.reader.getLastKey());
     
+    // test seeking to random location and reading all data from that point
+    // there was an off by one bug with this in the transient index
+    Random rand = new Random();
+    for (int i = 0; i < 12; i++) {
+      index = rand.nextInt(expectedKeys.size());
+      trf.seek(expectedKeys.get(index));
+      for (; index < expectedKeys.size(); index++) {
+        assertTrue(trf.iter.hasTop());
+        assertEquals(expectedKeys.get(index), trf.iter.getTopKey());
+        assertEquals(expectedValues.get(index), trf.iter.getTopValue());
+        trf.iter.next();
+      }
+    }
+
     trf.closeReader();
   }
   
@@ -403,6 +430,7 @@ public class RFileTest extends TestCase {
     assertFalse(evi.hasNext());
   }
   
+  @Test
   public void test4() throws IOException {
     TestRFile trf = new TestRFile();
     
@@ -445,6 +473,7 @@ public class RFileTest extends TestCase {
     }
   }
   
+  @Test
   public void test5() throws IOException {
     
     TestRFile trf = new TestRFile();
@@ -473,6 +502,7 @@ public class RFileTest extends TestCase {
     trf.closeReader();
   }
   
+  @Test
   public void test6() throws IOException {
     
     TestRFile trf = new TestRFile();
@@ -505,6 +535,7 @@ public class RFileTest extends TestCase {
     trf.closeReader();
   }
   
+  @Test
   public void test7() throws IOException {
     // these test excercise setting the end key of a range
     
@@ -556,6 +587,7 @@ public class RFileTest extends TestCase {
     trf.reader.close();
   }
   
+  @Test
   public void test8() throws IOException {
     TestRFile trf = new TestRFile();
     
@@ -672,6 +704,7 @@ public class RFileTest extends TestCase {
     return cfs;
   }
   
+  @Test
   public void test9() throws IOException {
     TestRFile trf = new TestRFile();
     
@@ -813,6 +846,7 @@ public class RFileTest extends TestCase {
     
   }
   
+  @Test
   public void test10() throws IOException {
     
     // test empty locality groups
@@ -941,6 +975,7 @@ public class RFileTest extends TestCase {
     trf.closeReader();
   }
   
+  @Test
   public void test11() throws IOException {
     // test locality groups with more than two entries
     
@@ -1045,6 +1080,7 @@ public class RFileTest extends TestCase {
     trf.closeReader();
   }
   
+  @Test
   public void test12() throws IOException {
     // test inserting column fams not in locality groups
     
@@ -1076,6 +1112,7 @@ public class RFileTest extends TestCase {
     
   }
   
+  @Test
   public void test13() throws IOException {
     // test inserting column fam in default loc group that was in
     // previous locality group
@@ -1117,6 +1154,7 @@ public class RFileTest extends TestCase {
     
   }
   
+  @Test
   public void test14() throws IOException {
     // test starting locality group after default locality group was started
     
@@ -1142,6 +1180,7 @@ public class RFileTest extends TestCase {
     trf.writer.close();
   }
   
+  @Test
   public void test16() throws IOException {
     TestRFile trf = new TestRFile();
     
@@ -1160,6 +1199,7 @@ public class RFileTest extends TestCase {
     trf.closeWriter();
   }
   
+  @Test
   public void test17() throws IOException {
     // add alot of the same keys to rfile that cover multiple blocks...
     // this should cause the keys in the index to be exactly the same...
@@ -1203,7 +1243,7 @@ public class RFileTest extends TestCase {
     assertFalse(trf.iter.hasTop());
     
     trf.iter.seek(new Range(nk("r0000", "cf1", "cq1", "", 1), false, nk("r0001", "cf1", "cq1", "", 1), true), EMPTY_COL_FAMS, false);
-    
+		
     for (int i = 2048; i < 4096; i++) {
       assertTrue(trf.iter.hasTop());
       assertEquals(nk("r0001", "cf1", "cq1", "", 1), trf.iter.getTopKey());
@@ -1298,6 +1338,7 @@ public class RFileTest extends TestCase {
     assertEquals(nonExcluded, colFamsSeen);
   }
   
+  @Test
   public void test18() throws IOException {
     // test writing more column families to default LG than it will track
     
@@ -1349,6 +1390,7 @@ public class RFileTest extends TestCase {
     trf.closeReader();
   }
   
+  @Test
   public void test19() throws IOException {
     // test RFile metastore
     TestRFile trf = new TestRFile();
@@ -1401,9 +1443,73 @@ public class RFileTest extends TestCase {
     trf.closeReader();
   }
   
+  @Test
+  public void testReseekUnconsumed() throws Exception {
+    TestRFile trf = new TestRFile();
+    
+    trf.openWriter();
+    
+    for (int i = 0; i < 2500; i++) {
+      trf.writer.append(nk(nf("r_", i), "cf1", "cq1", "L1", 42), nv("foo" + i));
+    }
+    
+    trf.closeWriter();
+    trf.openReader();
+    
+    Set<ByteSequence> cfs = Collections.emptySet();
+
+    Random rand = new Random();
+
+    for (int count = 0; count < 100; count++) {
+      
+      int start = rand.nextInt(2300);
+      Range range = new Range(nk(nf("r_", start), "cf1", "cq1", "L1", 42), nk(nf("r_", start + 100), "cf1", "cq1", "L1", 42));
+
+      trf.reader.seek(range, cfs, false);
+      
+      int numToScan = rand.nextInt(100);
+      
+      for (int j = 0; j < numToScan; j++) {
+        assertTrue(trf.reader.hasTop());
+        assertEquals(nk(nf("r_", start + j), "cf1", "cq1", "L1", 42), trf.reader.getTopKey());
+        trf.reader.next();
+      }
+      
+      assertTrue(trf.reader.hasTop());
+      assertEquals(nk(nf("r_", start + numToScan), "cf1", "cq1", "L1", 42), trf.reader.getTopKey());
+
+      // seek a little forward from the last range and read a few keys within the unconsumed portion of the last range
+
+      int start2 = start + numToScan + rand.nextInt(3);
+      int end2 = start2 + rand.nextInt(3);
+
+      range = new Range(nk(nf("r_", start2), "cf1", "cq1", "L1", 42), nk(nf("r_", end2), "cf1", "cq1", "L1", 42));
+      trf.reader.seek(range, cfs, false);
+      
+      for (int j = start2; j <= end2; j++) {
+        assertTrue(trf.reader.hasTop());
+        assertEquals(nk(nf("r_", j), "cf1", "cq1", "L1", 42), trf.reader.getTopKey());
+        trf.reader.next();
+      }
+      
+      assertFalse(trf.reader.hasTop());
+
+    }
+    
+    trf.closeReader();
+  }
+
+
+  @Test(expected = NullPointerException.class)
+  public void testMissingUnreleasedVersions() throws Exception {
+    runVersionTest(5);
+  }
+  
+  @Test
   public void testOldVersions() throws Exception {
     runVersionTest(3);
     runVersionTest(4);
+    runVersionTest(6);
   }
   
   private void runVersionTest(int version) throws IOException {

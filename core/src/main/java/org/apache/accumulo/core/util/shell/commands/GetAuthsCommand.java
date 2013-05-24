@@ -17,22 +17,32 @@
 package org.apache.accumulo.core.util.shell.commands;
 
 import java.io.IOException;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
+import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.core.util.shell.Shell;
 import org.apache.accumulo.core.util.shell.Shell.Command;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
+import org.apache.commons.lang.StringUtils;
 
 public class GetAuthsCommand extends Command {
   private Option userOpt;
   
   @Override
-  public int execute(String fullCommand, CommandLine cl, Shell shellState) throws AccumuloException, AccumuloSecurityException, IOException {
-    String user = cl.getOptionValue(userOpt.getOpt(), shellState.getConnector().whoami());
-    shellState.getReader().printString(shellState.getConnector().securityOperations().getUserAuthorizations(user) + "\n");
+  public int execute(final String fullCommand, final CommandLine cl, final Shell shellState) throws AccumuloException, AccumuloSecurityException, IOException {
+    final String user = cl.getOptionValue(userOpt.getOpt(), shellState.getConnector().whoami());
+    // Sort authorizations
+    Authorizations auths = shellState.getConnector().securityOperations().getUserAuthorizations(user);
+    SortedSet<String> set = new TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
+    for (byte[] auth : auths) {
+      set.add(new String(auth));
+    }
+    shellState.getReader().printString(StringUtils.join(set, ',') + "\n");
     return 0;
   }
   
@@ -43,7 +53,7 @@ public class GetAuthsCommand extends Command {
   
   @Override
   public Options getOptions() {
-    Options o = new Options();
+    final Options o = new Options();
     userOpt = new Option(Shell.userOption, "user", true, "user to operate on");
     userOpt.setArgName("user");
     o.addOption(userOpt);

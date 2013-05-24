@@ -17,6 +17,9 @@
 
 
 . continuous-env.sh
+export HADOOP_PREFIX
+
+mkdir -p $CONTINUOUS_LOG_DIR
 
 nohup ./agitator.pl $KILL_SLEEP_TIME $TUP_SLEEP_TIME $MIN_KILL $MAX_KILL >$CONTINUOUS_LOG_DIR/`date +%Y%m%d%H%M%S`_`hostname`_agitator.out 2>$CONTINUOUS_LOG_DIR/`date +%Y%m%d%H%M%S`_`hostname`_agitator.err &
 

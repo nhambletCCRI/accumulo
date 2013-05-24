@@ -1,35 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Licensed to the Apache Software Foundation (ASF) under one or more contributor 
-	license agreements. See the NOTICE file distributed with this work for additional 
-	information regarding copyright ownership. The ASF licenses this file to 
-	You under the Apache License, Version 2.0 (the "License"); you may not use 
-	this file except in compliance with the License. You may obtain a copy of 
-	the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required 
-	by applicable law or agreed to in writing, software distributed under the 
-	License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS 
-	OF ANY KIND, either express or implied. See the License for the specific 
-	language governing permissions and limitations under the License. -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
 
-	<parent>
-		<groupId>org.apache.accumulo</groupId>
-		<artifactId>accumulo</artifactId>
-		<version>1.5.0-SNAPSHOT</version>
-	</parent>
+      http://www.apache.org/licenses/LICENSE-2.0
 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <artifactId>accumulo-assemble</artifactId>
-  <name>accumulo-assemble</name>
-
+  <parent>
+    <groupId>org.apache.accumulo</groupId>
+    <artifactId>accumulo-project</artifactId>
+    <version>1.6.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>accumulo</artifactId>
   <packaging>pom</packaging>
-
-  <!-- NOTE: These dependency declarations are only required to sort this project to the end of the line in the multimodule build. Since we only include the child1 
-    module in our assembly, we only need to ensure this distribution project builds AFTER that one... -->
+  <name>Assemblies</name>
+  <properties>
+    <accumulo-top>..</accumulo-top>
+  </properties>
   <dependencies>
+    <!--
+       NOTE: These dependency declarations are required to sort
+       this project to the end of the line in the multimodule
+       build.
+       Further, the dependencies for Accumulo artifacts must be
+       here so they will be copied into the lib directory for
+       the binary distribution assemblies.
+    -->
     <dependency>
       <groupId>org.apache.accumulo</groupId>
       <artifactId>accumulo-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.accumulo</groupId>
+      <artifactId>accumulo-examples-simple</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.accumulo</groupId>
+      <artifactId>accumulo-fate</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.accumulo</groupId>
+      <artifactId>accumulo-minicluster</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.accumulo</groupId>
+      <artifactId>accumulo-proxy</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.accumulo</groupId>
@@ -41,19 +67,23 @@
     </dependency>
     <dependency>
       <groupId>org.apache.accumulo</groupId>
-      <artifactId>examples-simple</artifactId>
+      <artifactId>accumulo-test</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.accumulo</groupId>
-      <artifactId>wikisearch-query-war</artifactId>
-      <type>war</type>
+      <artifactId>accumulo-trace</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.accumulo</groupId>
-      <artifactId>cloudtrace</artifactId>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client</artifactId>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
-
   <build>
     <plugins>
       <plugin>
@@ -61,28 +91,17 @@
         <artifactId>exec-maven-plugin</artifactId>
         <executions>
           <execution>
-            <id>user-manual</id>
+            <id>config-webpage</id>
+            <goals>
+              <goal>java</goal>
+            </goals>
             <phase>prepare-package</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
             <configuration>
-              <executable>bash</executable>
+              <mainClass>org.apache.accumulo.core.conf.DefaultConfiguration</mainClass>
+              <classpathScope>compile</classpathScope>
               <arguments>
-                <argument>../docs/src/user_manual/build.sh</argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>config webpage</id>
-            <phase>package</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>bash</executable>
-              <arguments>
-                <argument>docgen.sh</argument>
+                <argument>--generate-doc</argument>
+                <argument>${project.build.directory}/../../docs/config.html</argument>
               </arguments>
             </configuration>
           </execution>
@@ -90,46 +109,61 @@
       </plugin>
     </plugins>
   </build>
-
-  <properties>
-    <so>**/*.so</so>
-    <jnilib>**/*.jnilib</jnilib>
-    <accumulo-top>..</accumulo-top>
-  </properties>
-
   <profiles>
     <profile>
-      <id>assemble</id>
+      <id>apache-release</id>
       <build>
-      <plugins>
-        <plugin>
-          <artifactId>maven-assembly-plugin</artifactId>
-          <configuration>
-            <finalName>${project.parent.artifactId}-${project.version}</finalName>
-            <descriptors>
-              <descriptor>dist.xml</descriptor>
-            </descriptors>
-            <tarLongFileMode>gnu</tarLongFileMode>
-          </configuration>
-          <executions>
-            <execution>
-              <id>distro-assembly</id>
-              <phase>package</phase>
-              <goals>
-                <goal>single</goal>
-              </goals>
-            </execution>
-          </executions>
-      </plugin>
-      </plugins>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>attach-source-release-assembly</id>
+                <goals>
+                  <goal>attach-artifact</goal>
+                </goals>
+                <configuration>
+                  <artifacts>
+                    <artifact>
+                      <file>${project.parent.build.directory}/${project.artifactId}-${project.version}-src.tar.gz</file>
+                      <type>tar.gz</type>
+                      <classifier>src</classifier>
+                    </artifact>
+                  </artifacts>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
       </build>
     </profile>
     <profile>
-      <id>dist</id>
-      <properties>
-        <so></so>
-        <jnilib></jnilib>
-      </properties>
+      <id>assemble</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-assembly-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>binary-assembly</id>
+                <goals>
+                  <goal>single</goal>
+                </goals>
+                <phase>package</phase>
+                <configuration>
+                  <attach>true</attach>
+                  <finalName>${project.artifactId}-${project.version}</finalName>
+                  <descriptors>
+                    <descriptor>src/main/assemblies/binary-release.xml</descriptor>
+                  </descriptors>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
     <profile>
       <id>rpm</id>
@@ -139,112 +173,244 @@
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>rpm-maven-plugin</artifactId>
             <inherited>false</inherited>
-            <executions>
-              <execution>
-                <phase>package</phase>
-                <goals>
-                  <goal>rpm</goal>
-                </goals>
-              </execution>
-            </executions>
             <configuration>
-              <name>accumulo</name>
-              <projversion>${project.version}</projversion>
+              <!--
+                The following is a trick to get the plugin to sign the rpm.
+                However, these values are ignored, and gpg-agent is used instead.
+                Requires copying contrib/dotfiles-rpmmacros to $HOME/.rpmmacros
+                This is a workaround for bug http://jira.codehaus.org/browse/MRPM-139
+              -->
+              <keyname>dummy</keyname>
+              <keyPassphrase>
+                <passphrase>dummy</passphrase>
+              </keyPassphrase>
               <summary>Apache Accumulo BigTable clone</summary>
-              <description>
-                Apache Accumulo is a large distributed structured store based on
-                Google's BigTable design.
-              </description>
-              <copyright>2011 The Apache Software Foundation.</copyright>
+              <description>Apache Accumulo is a large distributed structured store based on Google's BigTable design.</description>
+              <!-- This populates the license field of the RPM. -->
+              <copyright>Apache License, Version 2.0 and others (see included LICENSE file)</copyright>
               <url>http://accumulo.apache.org</url>
-              <needarch>true</needarch>
               <group>Utilities</group>
-              <requires>
-                <require>jdk</require>
-                <require>hadoop</require>
-                <require>zookeeper</require>
-              </requires>
               <prefix>/opt/accumulo</prefix>
               <defaultDirmode>755</defaultDirmode>
               <defaultFilemode>644</defaultFilemode>
               <defaultUsername>root</defaultUsername>
               <defaultGroupname>root</defaultGroupname>
-              <mappings>
-                <mapping>
-                  <directory>/opt/accumulo/accumulo-${project.version}</directory>
-                  <sources>
-                    <source>
-                      <location>${accumulo-top}/README</location>
-                    </source>
-                  </sources>
-                </mapping>
-                <mapping>
-                  <directory>/opt/accumulo/accumulo-${project.version}/docs</directory>
-                  <sources>
-                    <source>
-                      <location>${accumulo-top}/docs</location>
-                    </source>
-                  </sources>
-                </mapping>
-                <mapping>
-                  <directory>/opt/accumulo/accumulo-${project.version}/test</directory>
-                  <sources>
-                    <source>
-                      <location>${accumulo-top}/test</location>
-                      <excludes>
-                        <exclude>${accumulo-top}/**/walkers.txt</exclude>
-                        <exclude>${accumulo-top}/**/ingesters.txt</exclude>
-                        <exclude>${accumulo-top}/**/continuous-env.sh</exclude>
-                        <exclude>${accumulo-top}/**/*.pyc</exclude>
-                      </excludes>
-                    </source>
-                  </sources>
-                </mapping>
-                <mapping>
-                  <directory>/opt/accumulo/accumulo-${project.version}/bin</directory>
-                </mapping>
-                <mapping>
-                  <directory>/opt/accumulo/accumulo-${project.version}/bin</directory>
-                  <directoryIncluded>false</directoryIncluded>
-                  <filemode>755</filemode>
-                  <username>root</username>
-                  <groupname>root</groupname>
-                  <sources>
-                    <source>
-                      <location>${accumulo-top}/bin</location>
-                    </source>
-                  </sources>
-                </mapping>
-                <mapping>
-                  <directory>/opt/accumulo/accumulo-${project.version}/conf</directory>
-                  <sources>
-                    <source>
-                      <location>${accumulo-top}/conf</location>
-                      <excludes>
-                        <exclude>${accumulo-top}/**/accumulo-site.xml</exclude>
-                        <exclude>${accumulo-top}/**/accumulo-env.sh</exclude>
-                        <exclude>${accumulo-top}/**/accumulo-metrics.xml</exclude>
-                        <exclude>${accumulo-top}/**/test-*</exclude>
-                        <exclude>${accumulo-top}/**/slaves</exclude>
-                        <exclude>${accumulo-top}/**/masters</exclude>
-                        <exclude>${accumulo-top}/**/tracers</exclude>
-                        <exclude>${accumulo-top}/**/gc</exclude>
-                        <exclude>${accumulo-top}/**/monitor</exclude>
-                      </excludes>
-                    </source>
-                  </sources>
-                </mapping>
-                <mapping>
-                  <directory>/opt/accumulo/accumulo-${project.version}/lib</directory>
-                  <dependency />
-                  <sources>
-                    <source>
-                      <location>${accumulo-top}/lib</location>
-                    </source>
-                  </sources>
-                </mapping>
-              </mappings>
             </configuration>
+            <executions>
+              <execution>
+                <id>build-bin-rpm</id>
+                <goals>
+                  <goal>attached-rpm</goal>
+                </goals>
+                <phase>package</phase>
+                <configuration>
+                  <name>accumulo</name>
+                  <classifier>bin</classifier>
+                  <provides>
+                    <provide>accumulo</provide>
+                  </provides>
+                  <requires>
+                    <require>jre</require>
+                    <require>hadoop</require>
+                    <require>zookeeper</require>
+                  </requires>
+                  <mappings>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}</directory>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/CHANGES</location>
+                        </source>
+                        <source>
+                          <location>${accumulo-top}/LICENSE</location>
+                        </source>
+                        <source>
+                          <location>${accumulo-top}/NOTICE</location>
+                        </source>
+                        <source>
+                          <location>${accumulo-top}/README</location>
+                        </source>
+                      </sources>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/docs</directory>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/docs</location>
+                          <excludes>
+                            <exclude>src/**</exclude>
+                          </excludes>
+                        </source>
+                      </sources>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/bin</directory>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/bin</directory>
+                      <directoryIncluded>false</directoryIncluded>
+                      <filemode>755</filemode>
+                      <username>root</username>
+                      <groupname>root</groupname>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/bin</location>
+                        </source>
+                      </sources>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/proxy</directory>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/proxy/README</location>
+                        </source>
+                        <source>
+                          <location>${accumulo-top}/proxy/proxy.properties</location>
+                        </source>
+                      </sources>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/proxy/examples</directory>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/proxy/examples</location>
+                        </source>
+                      </sources>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/proxy/thrift</directory>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/proxy/src/main/thrift</location>
+                          <includes>
+                            <include>*.thrift</include>
+                          </includes>
+                        </source>
+                        <source>
+                          <location>${accumulo-top}/proxy/target</location>
+                          <includes>
+                            <include>gen-cpp/**</include>
+                            <include>gen-py/**</include>
+                            <include>gen-rb/**</include>
+                          </includes>
+                        </source>
+                      </sources>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/examples/simple</directory>
+                      <recurseDirectories>true</recurseDirectories>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/examples/simple</location>
+                          <includes>
+                            <include>src/main/**</include>
+                          </includes>
+                        </source>
+                      </sources>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/conf</directory>
+                      <recurseDirectories>true</recurseDirectories>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/conf</location>
+                          <includes>
+                            <include>accumulo.policy.example</include>
+                            <include>examples/**/*</include>
+                            <include>examples/**/*.*</include>
+                          </includes>
+                        </source>
+                      </sources>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/lib</directory>
+                      <recurseDirectories>true</recurseDirectories>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/lib</location>
+                          <includes>
+                            <include>*.jar</include>
+                          </includes>
+                        </source>
+                      </sources>
+                    </mapping>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/lib/ext</directory>
+                    </mapping>
+                  </mappings>
+                </configuration>
+              </execution>
+              <execution>
+                <id>build-native-libs-rpm</id>
+                <goals>
+                  <goal>attached-rpm</goal>
+                </goals>
+                <phase>package</phase>
+                <configuration>
+                  <name>accumulo-native</name>
+                  <classifier>native</classifier>
+                  <needarch>x86_64</needarch>
+                  <provides>
+                    <provide>accumulo-native</provide>
+                  </provides>
+                  <requires>
+                    <require>accumulo</require>
+                  </requires>
+                  <mappings>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/lib/native/map</directory>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/lib/native/map</location>
+                          <includes>
+                            <include>libNativeMap-Linux-amd64-64.so</include>
+                          </includes>
+                        </source>
+                      </sources>
+                    </mapping>
+                  </mappings>
+                </configuration>
+              </execution>
+              <execution>
+                <id>build-tests-rpm</id>
+                <goals>
+                  <goal>attached-rpm</goal>
+                </goals>
+                <phase>package</phase>
+                <configuration>
+                  <name>accumulo-test</name>
+                  <classifier>test</classifier>
+                  <provides>
+                    <provide>accumulo-test</provide>
+                  </provides>
+                  <requires>
+                    <require>accumulo</require>
+                    <require>python</require>
+                  </requires>
+                  <mappings>
+                    <mapping>
+                      <directory>/opt/accumulo/accumulo-${project.version}/test</directory>
+                      <sources>
+                        <source>
+                          <location>${accumulo-top}/test</location>
+                          <excludes>
+                            <exclude>src/**</exclude>
+                            <exclude>target/**</exclude>
+                            <exclude>**/walkers.txt</exclude>
+                            <exclude>**/ingesters.txt</exclude>
+                            <exclude>**/continuous-env.sh</exclude>
+                            <exclude>.*/**</exclude>
+                            <exclude>**/*.pyc</exclude>
+                            <exclude>**/*.pyo</exclude>
+                            <exclude>pom.xml</exclude>
+                          </excludes>
+                        </source>
+                      </sources>
+                    </mapping>
+                  </mappings>
+                </configuration>
+              </execution>
+            </executions>
           </plugin>
         </plugins>
       </build>
@@ -254,21 +420,21 @@
       <build>
         <plugins>
           <plugin>
-            <artifactId>jdeb</artifactId>
             <groupId>org.vafer</groupId>
+            <artifactId>jdeb</artifactId>
             <version>0.10</version>
             <inherited>false</inherited>
             <executions>
               <execution>
                 <id>accumulo</id>
-                <phase>install</phase>
                 <goals>
                   <goal>jdeb</goal>
                 </goals>
+                <phase>package</phase>
                 <configuration>
-                  <deb>${project.build.directory}/${project.artifactId}_${project.version}.deb</deb>
-                  <attach>false</attach>
-                  <controlDir>packages/deb/accumulo</controlDir>
+                  <deb>${project.build.directory}/accumulo-${project.version}.deb</deb>
+                  <classifier>bin</classifier>
+                  <controlDir>assemble/deb/accumulo</controlDir>
                   <installDir>/usr/lib/accumulo</installDir>
                   <dataSet>
                     <data>
@@ -278,22 +444,14 @@
                         <type>perm</type>
                         <prefix>/usr/lib/accumulo/lib</prefix>
                       </mapper>
-                      <excludes>**/.svn/**</excludes>
+                      <excludes>**/.svn/**,native/**</excludes>
                     </data>
                     <data>
                       <src>${accumulo-top}/NOTICE</src>
                       <type>file</type>
                       <mapper>
                         <type>perm</type>
-                      <prefix>/usr/lib/accumulo</prefix>
-                      </mapper>
-                    </data>
-                    <data>
-                      <src>${accumulo-top}/NOTICE</src>
-                      <type>file</type>
-                      <mapper>
-                        <type>perm</type>
-                      <prefix>/usr/lib/accumulo</prefix>
+                        <prefix>/usr/lib/accumulo</prefix>
                       </mapper>
                     </data>
                     <data>
@@ -301,7 +459,7 @@
                       <type>file</type>
                       <mapper>
                         <type>perm</type>
-                      <prefix>/usr/lib/accumulo</prefix>
+                        <prefix>/usr/lib/accumulo</prefix>
                       </mapper>
                     </data>
                     <data>
@@ -309,7 +467,15 @@
                       <type>file</type>
                       <mapper>
                         <type>perm</type>
-                      <prefix>/usr/lib/accumulo</prefix>
+                        <prefix>/usr/lib/accumulo</prefix>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${accumulo-top}/LICENSE</src>
+                      <type>file</type>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/usr/lib/accumulo</prefix>
                       </mapper>
                     </data>
                     <data>
@@ -319,7 +485,52 @@
                         <type>perm</type>
                         <prefix>/usr/lib/accumulo/docs</prefix>
                       </mapper>
+                      <excludes>**/.svn/**,src/**</excludes>
+                    </data>
+                    <data>
+                      <src>${accumulo-top}/proxy/README</src>
+                      <type>file</type>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/usr/lib/accumulo/proxy</prefix>
+                      </mapper>
+                      <includes>*.thrift</includes>
+                    </data>
+                    <data>
+                      <src>${accumulo-top}/proxy/proxy.properties</src>
+                      <type>file</type>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/usr/lib/accumulo/proxy</prefix>
+                      </mapper>
+                      <includes>*.thrift</includes>
+                    </data>
+                    <data>
+                      <src>${accumulo-top}/proxy/examples</src>
+                      <type>directory</type>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/usr/lib/accumulo/proxy/examples</prefix>
+                      </mapper>
                       <excludes>**/.svn/**</excludes>
+                    </data>
+                    <data>
+                      <src>${accumulo-top}/proxy/src/main/thrift</src>
+                      <type>directory</type>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/usr/lib/accumulo/proxy/thrift</prefix>
+                      </mapper>
+                      <includes>*.thrift</includes>
+                    </data>
+                    <data>
+                      <src>${accumulo-top}/proxy/target</src>
+                      <type>directory</type>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/usr/lib/accumulo/proxy/thrift</prefix>
+                      </mapper>
+                      <includes>gen-cpp/**,gen-py/**,gen-rb/**</includes>
                     </data>
                     <data>
                       <src>${accumulo-top}/bin</src>
@@ -332,28 +543,39 @@
                       <excludes>**/.svn/**</excludes>
                     </data>
                     <data>
+                      <src>${accumulo-top}/examples/simple</src>
+                      <type>directory</type>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/usr/lib/accumulo/examples/simple</prefix>
+                      </mapper>
+                      <includes>src/main/**</includes>
+                      <excludes>**/.svn/**</excludes>
+                    </data>
+                    <data>
                       <src>${accumulo-top}/conf</src>
                       <type>directory</type>
                       <mapper>
                         <type>perm</type>
                         <prefix>/usr/lib/accumulo/conf</prefix>
                       </mapper>
-                      <excludes>**/.svn/**,**/accumulo-site.xml,**/accumulo-env.sh,**/accumulo-metrics.xml,**/test-*,**/slaves,**/masters,**/tracers,**/gc,**/monitor</excludes>
+                      <includes>accumulo.policy.example,examples/**</includes>
+                      <excludes>**/.svn/**</excludes>
                     </data>
                   </dataSet>
                 </configuration>
               </execution>
               <execution>
                 <id>accumulo-native</id>
-                <phase>install</phase>
                 <goals>
                   <goal>jdeb</goal>
                 </goals>
+                <phase>package</phase>
                 <configuration>
-                  <attach>false</attach>
-                  <controlDir>packages/deb/accumulo-native</controlDir>
+                  <deb>${project.build.directory}/accumulo-native-${project.version}.deb</deb>
+                  <controlDir>assemble/deb/accumulo-native</controlDir>
                   <installDir>/usr/lib/accumulo</installDir>
-                  <deb>${project.build.directory}/${project.artifactId}-native_${project.version}-${os.arch}.deb</deb>
+                  <classifier>native</classifier>
                   <dataSet>
                     <data>
                       <src>${accumulo-top}/server/src/main/c++</src>
@@ -385,15 +607,15 @@
               </execution>
               <execution>
                 <id>accumulo-test</id>
-                <phase>install</phase>
                 <goals>
                   <goal>jdeb</goal>
                 </goals>
+                <phase>package</phase>
                 <configuration>
-                  <attach>false</attach>
-                  <controlDir>packages/deb/accumulo-test</controlDir>
+                  <deb>${project.build.directory}/accumulo-test-${project.version}.deb</deb>
+                  <controlDir>assemble/deb/accumulo-test</controlDir>
                   <installDir>/usr/lib/accumulo</installDir>
-                  <deb>${project.build.directory}/${project.artifactId}-test_${project.version}-${os.arch}.deb</deb>
+                  <classifier>test</classifier>
                   <dataSet>
                     <data>
                       <src>${accumulo-top}/test</src>
@@ -402,9 +624,56 @@
                         <type>perm</type>
                         <prefix>/usr/lib/accumulo/test</prefix>
                       </mapper>
-                      <excludes>**/.svn/**,**/*.pyc</excludes>
+                      <excludes>**/.svn/**,**/*.pyc,src/**,target/**,**/walkers.txt,**/ingesters.txt,**/continuous-env.sh,.*/**,**/*.pyc,**/*.pyo,pom.xml</excludes>
                     </data>
                   </dataSet>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>docs</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-resources-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>copy-pdf-manuals</id>
+                <goals>
+                  <goal>copy-resources</goal>
+                </goals>
+                <phase>prepare-package</phase>
+                <configuration>
+                  <outputDirectory>../docs</outputDirectory>
+                  <resources>
+                    <resource>
+                      <directory>${project.build.directory}</directory>
+                      <includes>
+                        <include>*.pdf</include>
+                      </includes>
+                    </resource>
+                  </resources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>latex-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>build-pdf-manuals</id>
+                <goals>
+                  <goal>latex</goal>
+                </goals>
+                <phase>compile</phase>
+                <configuration>
+                  <docsRoot>../docs/src/main/latex</docsRoot>
                 </configuration>
               </execution>
             </executions>

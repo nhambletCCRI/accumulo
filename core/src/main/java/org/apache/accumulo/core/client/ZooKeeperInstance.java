@@ -16,6 +16,7 @@
  */
 package org.apache.accumulo.core.client;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -24,10 +25,13 @@ import java.util.UUID;
 
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.impl.ConnectorImpl;
+import org.apache.accumulo.core.client.security.tokens.AuthenticationToken;
+import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.file.FileUtil;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
+import org.apache.accumulo.core.security.CredentialHelper;
+import org.apache.accumulo.core.security.thrift.TCredentials;
 import org.apache.accumulo.core.util.ArgumentChecker;
 import org.apache.accumulo.core.util.ByteBufferUtil;
 import org.apache.accumulo.core.util.CachedConfiguration;
@@ -63,11 +67,11 @@ public class ZooKeeperInstance implements Instance {
   private String instanceId = null;
   private String instanceName = null;
   
-  private ZooCache zooCache;
+  private final ZooCache zooCache;
   
-  private String zooKeepers;
+  private final String zooKeepers;
   
-  private int zooKeepersSessionTimeOut;
+  private final int zooKeepersSessionTimeOut;
   
   /**
    * 
@@ -202,20 +206,31 @@ public class ZooKeeperInstance implements Instance {
   }
   
   @Override
+  @Deprecated
   public Connector getConnector(String user, CharSequence pass) throws AccumuloException, AccumuloSecurityException {
     return getConnector(user, TextUtil.getBytes(new Text(pass.toString())));
   }
   
   @Override
+  @Deprecated
   public Connector getConnector(String user, ByteBuffer pass) throws AccumuloException, AccumuloSecurityException {
     return getConnector(user, ByteBufferUtil.toBytes(pass));
   }
   
-  // Suppress deprecation, ConnectorImpl is deprecated to warn clients against using.
-  @SuppressWarnings("deprecation")
   @Override
-  public Connector getConnector(String user, byte[] pass) throws AccumuloException, AccumuloSecurityException {
-    return new ConnectorImpl(this, user, pass);
+  public Connector getConnector(String principal, AuthenticationToken token) throws AccumuloException, AccumuloSecurityException {
+    return getConnector(CredentialHelper.create(principal, token, getInstanceID()));
+  }
+  
+  @SuppressWarnings("deprecation")
+  private Connector getConnector(TCredentials credential) throws AccumuloException, AccumuloSecurityException {
+    return new ConnectorImpl(this, credential);
+  }
+  
+  @Override
+  @Deprecated
+  public Connector getConnector(String principal, byte[] pass) throws AccumuloException, AccumuloSecurityException {
+    return getConnector(principal, new PasswordToken(pass));
   }
   
   private AccumuloConfiguration conf = null;
@@ -230,6 +245,14 @@ public class ZooKeeperInstance implements Instance {
   @Override
   public void setConfiguration(AccumuloConfiguration conf) {
     this.conf = conf;
+  }
+  
+  /**
+   * @deprecated Use {@link #lookupInstanceName(org.apache.accumulo.fate.zookeeper.ZooCache, UUID)} instead
+   */
+  @Deprecated
+  public static String lookupInstanceName(org.apache.accumulo.core.zookeeper.ZooCache zooCache, UUID instanceId) {
+    return lookupInstanceName((ZooCache) zooCache, instanceId);
   }
   
   /**
@@ -251,12 +274,19 @@ public class ZooKeeperInstance implements Instance {
     return null;
   }
   
-  // To be moved to server code. Only lives here to support the Accumulo Shell
+  /**
+   * To be moved to server code. Only lives here to support certain client side utilities to minimize command-line options.
+   */
   @Deprecated
   public static String getInstanceIDFromHdfs(Path instanceDirectory) {
     try {
       FileSystem fs = FileUtil.getFileSystem(CachedConfiguration.getInstance(), AccumuloConfiguration.getSiteConfiguration());
-      FileStatus[] files = fs.listStatus(instanceDirectory);
+      FileStatus[] files = null;
+      try {
+        files = fs.listStatus(instanceDirectory);
+      } catch (FileNotFoundException ex) {
+        // ignored
+      }
       log.debug("Trying to read instance id from " + instanceDirectory);
       if (files == null || files.length == 0) {
         log.error("unable obtain instance id at " + instanceDirectory);
@@ -273,8 +303,9 @@ public class ZooKeeperInstance implements Instance {
     }
   }
   
+  @Deprecated
   @Override
-  public Connector getConnector(AuthInfo auth) throws AccumuloException, AccumuloSecurityException {
+  public Connector getConnector(org.apache.accumulo.core.security.thrift.AuthInfo auth) throws AccumuloException, AccumuloSecurityException {
     return getConnector(auth.user, auth.password);
   }
 }

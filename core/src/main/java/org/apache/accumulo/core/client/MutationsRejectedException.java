@@ -18,8 +18,14 @@ package org.apache.accumulo.core.client;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
+import org.apache.accumulo.core.client.impl.Tables;
+import org.apache.accumulo.core.client.security.SecurityErrorCode;
 import org.apache.accumulo.core.data.ConstraintViolationSummary;
 import org.apache.accumulo.core.data.KeyExtent;
 
@@ -29,32 +35,48 @@ import org.apache.accumulo.core.data.KeyExtent;
  */
 public class MutationsRejectedException extends AccumuloException {
   private static final long serialVersionUID = 1L;
-  
+   
   private List<ConstraintViolationSummary> cvsl;
-  private ArrayList<KeyExtent> af;
+  private Map<KeyExtent,Set<SecurityErrorCode>> af;
   private Collection<String> es;
   private int unknownErrors;
   
   /**
    * @param cvsList
    *          list of constraint violations
-   * @param af
+   * @param hashMap
    *          authorization failures
    * @param serverSideErrors
    *          server side errors
    * @param unknownErrors
    *          number of unknown errors
    */
-  public MutationsRejectedException(List<ConstraintViolationSummary> cvsList, ArrayList<KeyExtent> af, Collection<String> serverSideErrors, int unknownErrors,
-      Throwable cause) {
-    super("# constraint violations : " + cvsList.size() + "  # authorization failures : " + af.size() + "  # server errors " + serverSideErrors.size()
+  public MutationsRejectedException(Instance instance, List<ConstraintViolationSummary> cvsList, HashMap<KeyExtent,Set<SecurityErrorCode>> hashMap,
+      Collection<String> serverSideErrors, int unknownErrors, Throwable cause) {
+    super("# constraint violations : " + cvsList.size() + "  security codes: " + format(hashMap, instance) + "  # server errors " + serverSideErrors.size()
         + " # exceptions " + unknownErrors, cause);
     this.cvsl = cvsList;
-    this.af = af;
+    this.af = hashMap;
     this.es = serverSideErrors;
     this.unknownErrors = unknownErrors;
   }
   
+  private static String format(HashMap<KeyExtent,Set<SecurityErrorCode>> hashMap, Instance instance) {
+    Map<String, Set<SecurityErrorCode>> errorMap = new HashMap<String,Set<SecurityErrorCode>>();
+    
+    for(KeyExtent ke : hashMap.keySet()) {
+      String tableInfo = Tables.getPrintableTableInfoFromId(instance, ke.getTableId().toString());
+      
+      if(!errorMap.containsKey(tableInfo)) {
+        errorMap.put(tableInfo, new HashSet<SecurityErrorCode>());
+      }
+      
+      errorMap.get(tableInfo).addAll(hashMap.get(ke));
+    }
+    
+    return errorMap.toString();
+  }
+    
   /**
    * @return the internal list of constraint violations
    */
@@ -64,8 +86,17 @@ public class MutationsRejectedException extends AccumuloException {
   
   /**
    * @return the internal list of authorization failures
+   * @deprecated since 1.5, see {@link #getAuthorizationFailuresMap()}
    */
   public List<KeyExtent> getAuthorizationFailures() {
+    return new ArrayList<KeyExtent>(af.keySet());
+  }
+  
+  /**
+   * @return the internal mapping of keyextent mappings to SecurityErrorCode
+   * @since 1.5.0
+   */
+  public Map<KeyExtent,Set<SecurityErrorCode>> getAuthorizationFailuresMap() {
     return af;
   }
   

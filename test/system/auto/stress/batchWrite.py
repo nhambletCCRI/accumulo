@@ -19,7 +19,7 @@ import logging
 import unittest
 import time
 
-from TestUtils import TestUtilsMixin
+from TestUtils import TestUtilsMixin, ROOT_PASSWORD
 
 log = logging.getLogger('test.auto')
 
@@ -32,8 +32,8 @@ class WriteLots(unittest.TestCase, TestUtilsMixin):
     settings['instance.zookeeper.timeout'] = '40s'
 
     def ingest(self, host, start, count, **kwargs):
-        klass = 'org.apache.accumulo.server.test.TestIngest'
-        args = '-tsbw -size 50 -random 56 %d %d 1' % (count, start)
+        klass = 'org.apache.accumulo.test.TestIngest'
+        args = '--user root --size 50 --random 56 --rows %d --start %d --cols 1 -p %s' % (count, start, ROOT_PASSWORD)
         return self.runClassOn(host, klass, args.split(), **kwargs)
 
     def setUp(self):
@@ -48,7 +48,7 @@ class WriteLots(unittest.TestCase, TestUtilsMixin):
 
     def runTest(self):
         N = 10*len(self.hosts)
-        waitTime = 60 * N * self.options.rows / 200000 + 30
+        waitTime = 60 * N * self.options.rows / 200000 + 90
 
         log.info("Starting %d clients", N)
         handles = []

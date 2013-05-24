@@ -25,16 +25,17 @@ import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.core.security.ColumnVisibility;
 import org.apache.accumulo.core.security.VisibilityEvaluator;
 import org.apache.accumulo.core.security.VisibilityParseException;
+import org.apache.accumulo.core.util.BadArgumentException;
 import org.apache.accumulo.core.util.TextUtil;
 import org.apache.commons.collections.map.LRUMap;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
 
 public class VisibilityFilter extends Filter {
-  private VisibilityEvaluator ve;
-  private Text defaultVisibility;
-  private LRUMap cache;
-  private Text tmpVis;
+  protected VisibilityEvaluator ve;
+  protected Text defaultVisibility;
+  protected LRUMap cache;
+  protected Text tmpVis;
   
   private static final Logger log = Logger.getLogger(VisibilityFilter.class);
   
@@ -71,6 +72,9 @@ public class VisibilityFilter extends Filter {
       cache.put(new Text(testVis), bb);
       return bb;
     } catch (VisibilityParseException e) {
+      log.error("Parse Error", e);
+      return false;
+    } catch (BadArgumentException e) {
       log.error("Parse Error", e);
       return false;
     }

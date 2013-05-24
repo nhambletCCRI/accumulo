@@ -16,6 +16,7 @@
  */
 package org.apache.accumulo.core.util.shell.commands;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import org.apache.accumulo.core.client.AccumuloException;
@@ -37,18 +38,24 @@ public class ImportDirectoryCommand extends Command {
   }
   
   @Override
-  public int execute(String fullCommand, CommandLine cl, Shell shellState) throws IOException, AccumuloException, AccumuloSecurityException,
+  public int execute(final String fullCommand, final CommandLine cl, final Shell shellState) throws IOException, AccumuloException, AccumuloSecurityException,
       TableNotFoundException {
     shellState.checkTableState();
     
     String dir = cl.getArgs()[0];
     String failureDir = cl.getArgs()[1];
-    boolean setTime = Boolean.parseBoolean(cl.getArgs()[2]);
+    final boolean setTime = Boolean.parseBoolean(cl.getArgs()[2]);
     
-    FileSystem fs = FileSystem.get(CachedConfiguration.getInstance());
-    FileStatus failStatus = fs.getFileStatus(new Path(failureDir));
-    if (failStatus == null || !failStatus.isDir() || fs.listStatus(new Path(failureDir)).length != 0)
+    final FileSystem fs = FileSystem.get(CachedConfiguration.getInstance());
+    FileStatus failStatus = null;
+    try {
+      failStatus = fs.getFileStatus(new Path(failureDir));
+    } catch (FileNotFoundException ex) {
+      // ignored
+    }
+    if (failStatus == null || !failStatus.isDir() || fs.listStatus(new Path(failureDir)).length != 0) {
       throw new AccumuloException(failureDir + " is not an empty directory");
+    }
     shellState.getConnector().tableOperations().importDirectory(shellState.getTableName(), dir, failureDir, setTime);
     return 0;
   }

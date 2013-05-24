@@ -17,6 +17,8 @@
 package org.apache.accumulo.server.monitor.servlets.trace;
 
 import java.util.Date;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -25,13 +27,16 @@ import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.client.TableNotFoundException;
+import org.apache.accumulo.core.client.security.tokens.AuthenticationToken;
+import org.apache.accumulo.core.client.security.tokens.AuthenticationToken.Properties;
+import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
-import org.apache.accumulo.core.trace.TraceDump;
 import org.apache.accumulo.core.trace.TraceFormatter;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.monitor.Monitor;
 import org.apache.accumulo.server.monitor.servlets.BasicServlet;
+import org.apache.accumulo.start.classloader.AccumuloClassLoader;
 
 abstract class Basic extends BasicServlet {
   
@@ -62,17 +67,39 @@ abstract class Basic extends BasicServlet {
     return TraceFormatter.formatDate(new Date(millis));
   }
   
-  protected Scanner getScanner(StringBuilder sb) throws AccumuloException {
+  protected Scanner getScanner(StringBuilder sb) throws AccumuloException, AccumuloSecurityException {
     AccumuloConfiguration conf = Monitor.getSystemConfiguration();
-    String user = conf.get(Property.TRACE_USER);
-    byte[] passwd = conf.get(Property.TRACE_PASSWORD).getBytes();
+    String principal = conf.get(Property.TRACE_USER);
+    AuthenticationToken at;
+    Map<String,String> loginMap = conf.getAllPropertiesWithPrefix(Property.TRACE_TOKEN_PROPERTY_PREFIX);
+    if (loginMap.isEmpty()) {
+      Property p = Property.TRACE_PASSWORD;
+      at = new PasswordToken(conf.get(p).getBytes());
+    } else {
+      Properties props = new Properties();
+      int prefixLength = Property.TRACE_TOKEN_PROPERTY_PREFIX.getKey().length() + 1;
+      for (Entry<String,String> entry : loginMap.entrySet()) {
+        props.put(entry.getKey().substring(prefixLength), entry.getValue());
+      }
+      
+      AuthenticationToken token;
+      try {
+        token = AccumuloClassLoader.getClassLoader().loadClass(conf.get(Property.TRACE_TOKEN_TYPE)).asSubclass(AuthenticationToken.class).newInstance();
+      } catch (Exception e) {
+        throw new AccumuloException(e);
+      }
+      
+      token.init(props);
+      at = token;
+    }
+    
     String table = conf.get(Property.TRACE_TABLE);
     try {
-      Connector conn = HdfsZooInstance.getInstance().getConnector(user, passwd);
-      if (!conn.tableOperations().exists(TraceDump.TRACE_TABLE)) {
+      Connector conn = HdfsZooInstance.getInstance().getConnector(principal, at);
+      if (!conn.tableOperations().exists(table)) {
         return new NullScanner();
       }
-      Scanner scanner = conn.createScanner(table, conn.securityOperations().getUserAuthorizations(user));
+      Scanner scanner = conn.createScanner(table, conn.securityOperations().getUserAuthorizations(principal));
       return scanner;
     } catch (AccumuloSecurityException ex) {
       sb.append("<h2>Unable to read trace table: check trace username and password configuration.</h2>\n");

@@ -14,9 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/**
- * 
- */
 package org.apache.accumulo.server.master;
 
 import org.apache.accumulo.fate.zookeeper.ZooLock.AsyncLockWatcher;
@@ -39,5 +36,8 @@ class TServerLockWatcher implements AsyncLockWatcher {
   
   @Override
   public void lostLock(LockLossReason reason) {}
+  
+  @Override
+  public void unableToMonitorLockNode(Throwable e) {}
   
 }

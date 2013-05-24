@@ -16,14 +16,14 @@
  */
 package org.apache.accumulo.core.client.impl;
 
-import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
-import org.apache.accumulo.cloudtrace.instrument.Tracer;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.BatchDeleter;
 import org.apache.accumulo.core.client.BatchScanner;
 import org.apache.accumulo.core.client.BatchWriter;
+import org.apache.accumulo.core.client.BatchWriterConfig;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.Instance;
 import org.apache.accumulo.core.client.MultiTableBatchWriter;
@@ -37,46 +37,35 @@ import org.apache.accumulo.core.client.admin.SecurityOperationsImpl;
 import org.apache.accumulo.core.client.admin.TableOperations;
 import org.apache.accumulo.core.client.admin.TableOperationsImpl;
 import org.apache.accumulo.core.client.impl.thrift.ClientService;
+import org.apache.accumulo.core.client.impl.thrift.SecurityErrorCode;
 import org.apache.accumulo.core.master.state.tables.TableState;
 import org.apache.accumulo.core.security.Authorizations;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
+import org.apache.accumulo.core.security.thrift.TCredentials;
 import org.apache.accumulo.core.util.ArgumentChecker;
+import org.apache.accumulo.trace.instrument.Tracer;
 
 public class ConnectorImpl extends Connector {
-  private Instance instance;
-  private AuthInfo credentials;
+  private final Instance instance;
+  private final TCredentials credentials;
   private SecurityOperations secops = null;
   private TableOperations tableops = null;
   private InstanceOperations instanceops = null;
   
-/**
-     * 
-     * Use {@link Instance#getConnector(String, byte[])}
-     * 
-     * @param instance
-     * @param user
-     * @param password
-     * @throws AccumuloException
-     * @throws AccumuloSecurityException
-     * @see Instance#getConnector(String user, byte[] password)
-     * @deprecated Not for client use
-     */
-  public ConnectorImpl(Instance instance, String user, byte[] password) throws AccumuloException, AccumuloSecurityException {
-    ArgumentChecker.notNull(instance, user, password);
+  @Deprecated
+  public ConnectorImpl(Instance instance, TCredentials cred) throws AccumuloException, AccumuloSecurityException {
+    ArgumentChecker.notNull(instance, cred);
     this.instance = instance;
     
-    // copy password so that user can clear it.... in future versions we can clear it...
-    byte[] passCopy = new byte[password.length];
-    System.arraycopy(password, 0, passCopy, 0, password.length);
-    this.credentials = new AuthInfo(user, ByteBuffer.wrap(password), instance.getInstanceID());
+    this.credentials = cred;
     
     // hardcoded string for SYSTEM user since the definition is
     // in server code
-    if (!user.equals("!SYSTEM")) {
+    if (!cred.getPrincipal().equals("!SYSTEM")) {
       ServerClient.execute(instance, new ClientExec<ClientService.Client>() {
         @Override
         public void execute(ClientService.Client iface) throws Exception {
-          iface.authenticateUser(Tracer.traceInfo(), credentials, credentials.user, credentials.password);
+          if (!iface.authenticate(Tracer.traceInfo(), credentials))
+            throw new AccumuloSecurityException("Authentication failed, access denied", SecurityErrorCode.BAD_CREDENTIALS);
         }
       });
     }
@@ -100,22 +89,46 @@ public class ConnectorImpl extends Connector {
     return new TabletServerBatchReader(instance, credentials, getTableId(tableName), authorizations, numQueryThreads);
   }
   
+  @Deprecated
   @Override
   public BatchDeleter createBatchDeleter(String tableName, Authorizations authorizations, int numQueryThreads, long maxMemory, long maxLatency,
       int maxWriteThreads) throws TableNotFoundException {
     ArgumentChecker.notNull(tableName, authorizations);
-    return new TabletServerBatchDeleter(instance, credentials, getTableId(tableName), authorizations, numQueryThreads, maxMemory, maxLatency, maxWriteThreads);
+    return new TabletServerBatchDeleter(instance, credentials, getTableId(tableName), authorizations, numQueryThreads, new BatchWriterConfig()
+        .setMaxMemory(maxMemory).setMaxLatency(maxLatency, TimeUnit.MILLISECONDS).setMaxWriteThreads(maxWriteThreads));
   }
   
+  @Override
+  public BatchDeleter createBatchDeleter(String tableName, Authorizations authorizations, int numQueryThreads, BatchWriterConfig config)
+      throws TableNotFoundException {
+    ArgumentChecker.notNull(tableName, authorizations);
+    return new TabletServerBatchDeleter(instance, credentials, getTableId(tableName), authorizations, numQueryThreads, config);
+  }
+  
+  @Deprecated
   @Override
   public BatchWriter createBatchWriter(String tableName, long maxMemory, long maxLatency, int maxWriteThreads) throws TableNotFoundException {
     ArgumentChecker.notNull(tableName);
-    return new BatchWriterImpl(instance, credentials, getTableId(tableName), maxMemory, maxLatency, maxWriteThreads);
+    return new BatchWriterImpl(instance, credentials, getTableId(tableName), new BatchWriterConfig().setMaxMemory(maxMemory)
+        .setMaxLatency(maxLatency, TimeUnit.MILLISECONDS).setMaxWriteThreads(maxWriteThreads));
   }
   
   @Override
+  public BatchWriter createBatchWriter(String tableName, BatchWriterConfig config) throws TableNotFoundException {
+    ArgumentChecker.notNull(tableName);
+    return new BatchWriterImpl(instance, credentials, getTableId(tableName), config);
+  }
+  
+  @Deprecated
+  @Override
   public MultiTableBatchWriter createMultiTableBatchWriter(long maxMemory, long maxLatency, int maxWriteThreads) {
-    return new MultiTableBatchWriterImpl(instance, credentials, maxMemory, maxLatency, maxWriteThreads);
+    return new MultiTableBatchWriterImpl(instance, credentials, new BatchWriterConfig().setMaxMemory(maxMemory)
+        .setMaxLatency(maxLatency, TimeUnit.MILLISECONDS).setMaxWriteThreads(maxWriteThreads));
+  }
+  
+  @Override
+  public MultiTableBatchWriter createMultiTableBatchWriter(BatchWriterConfig config) {
+    return new MultiTableBatchWriterImpl(instance, credentials, config);
   }
   
   @Override
@@ -124,21 +137,11 @@ public class ConnectorImpl extends Connector {
     return new ScannerImpl(instance, credentials, getTableId(tableName), authorizations);
   }
   
-  /*
-   * (non-Javadoc)
-   * 
-   * @see accumulo.core.client.Connector#whoami()
-   */
   @Override
   public String whoami() {
-    return credentials.user;
+    return credentials.getPrincipal();
   }
   
-  /*
-   * (non-Javadoc)
-   * 
-   * @see accumulo.core.client.Connector#tableOperations()
-   */
   @Override
   public synchronized TableOperations tableOperations() {
     if (tableops == null)
@@ -146,11 +149,6 @@ public class ConnectorImpl extends Connector {
     return tableops;
   }
   
-  /*
-   * (non-Javadoc)
-   * 
-   * @see accumulo.core.client.Connector#securityOperations()
-   */
   @Override
   public synchronized SecurityOperations securityOperations() {
     if (secops == null)
@@ -159,11 +157,6 @@ public class ConnectorImpl extends Connector {
     return secops;
   }
   
-  /*
-   * (non-Javadoc)
-   * 
-   * @see accumulo.core.client.Connector#instanceOperations()
-   */
   @Override
   public synchronized InstanceOperations instanceOperations() {
     if (instanceops == null)

@@ -25,7 +25,6 @@ import java.util.Set;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.accumulo.cloudtrace.thrift.RemoteSpan;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Range;
@@ -35,12 +34,15 @@ import org.apache.accumulo.core.trace.SpanTreeVisitor;
 import org.apache.accumulo.core.trace.TraceDump;
 import org.apache.accumulo.core.trace.TraceFormatter;
 import org.apache.accumulo.server.monitor.servlets.BasicServlet;
+import org.apache.accumulo.trace.thrift.RemoteSpan;
 import org.apache.hadoop.io.Text;
 
 
 public class ShowTrace extends Basic {
   
   private static final long serialVersionUID = 1L;
+  private static final String checkboxIdSuffix = "_checkbox";
+  private static final String pageLoadFunctionName = "pageload";
   
   String getTraceId(HttpServletRequest req) {
     return getStringParameter(req, "id", null);
@@ -87,10 +89,22 @@ public class ShowTrace extends Basic {
     sb.append("    elt.style.display='none';\n ");
     sb.append(" }\n");
     sb.append("}\n");
+
+    sb.append("function ").append(pageLoadFunctionName).append("() {\n");
+    sb.append("  var checkboxes = document.getElementsByTagName('input');\n");
+    sb.append("  for (var i = 0; i < checkboxes.length; i++) {\n");
+    sb.append("    if (checkboxes[i].checked) {\n");
+    sb.append("      var idSuffixOffset = checkboxes[i].id.indexOf('").append(checkboxIdSuffix).append("');\n");
+    sb.append("      var id = checkboxes[i].id.substring(0, idSuffixOffset);\n");
+    sb.append("      document.getElementById(id).style.display='table-row';\n");
+    sb.append("    }\n");
+    sb.append("  }\n");
+    sb.append("}\n");
+
     sb.append("</script>\n");
     sb.append("<div>");
     sb.append("<table><caption>");
-    sb.append(String.format("<span class='table-caption'>Trace started at<br>%s</span></caption>", id, dateString(start)));
+    sb.append(String.format("<span class='table-caption'>Trace %s started at<br>%s</span></caption>", id, dateString(start)));
     sb.append("<tr><th>Time</th><th>Start</th><th>Service@Location</th><th>Name</th><th>Addl Data</th></tr>");
     
     final long finalStart = start;
@@ -98,23 +112,30 @@ public class ShowTrace extends Basic {
       @Override
       public void visit(int level, RemoteSpan parent, RemoteSpan node, Collection<RemoteSpan> children) {
         sb.append("<tr>\n");
-        sb.append(String.format("<td class='right'>%d+</td><td class='left'>%d</td>\n", node.stop - node.start, node.start - finalStart));
-        sb.append(String.format("<td style='text-indent: %dpx'>%s@%s</td>\n", level * 5, node.svc, node.sender));
+        sb.append(String.format("<td class='right'>%d+</td><td class='left'>%d</td>%n", node.stop - node.start, node.start - finalStart));
+        sb.append(String.format("<td style='text-indent: %dpx'>%s@%s</td>%n", level * 5, node.svc, node.sender));
         sb.append("<td>" + node.description + "</td>");
         boolean hasData = node.data != null && !node.data.isEmpty();
-        if (hasData)
-          sb.append("<td><input type='checkbox' onclick='toggle(\"" + Long.toHexString(node.spanId) + "\")'></td>\n");
-        else
+        if (hasData) {
+          String hexSpanId = Long.toHexString(node.spanId);
+          sb.append("<td><input type='checkbox' id=\"");
+          sb.append(hexSpanId);
+          sb.append(checkboxIdSuffix);
+          sb.append("\" onclick='toggle(\"" + Long.toHexString(node.spanId) + "\")'></td>\n");
+        } else {
           sb.append("<td></td>\n");
+        }
         sb.append("</tr>\n");
         sb.append("<tr id='" + Long.toHexString(node.spanId) + "' style='display:none'>");
         sb.append("<td colspan='5'>\n");
-        sb.append("  <table class='indent,noborder'>\n");
-        for (Entry<String,String> entry : node.data.entrySet()) {
-          sb.append("  <tr><td>" + BasicServlet.sanitize(entry.getKey()) + "</td>");
-          sb.append("<td>" + BasicServlet.sanitize(entry.getValue()) + "</td></tr>\n");
+        if (hasData) {
+          sb.append("  <table class='indent,noborder'>\n");
+          for (Entry<String,String> entry : node.data.entrySet()) {
+            sb.append("  <tr><td>" + BasicServlet.sanitize(entry.getKey()) + "</td>");
+            sb.append("<td>" + BasicServlet.sanitize(entry.getValue()) + "</td></tr>\n");
+          }
+          sb.append("  </table>");
         }
-        sb.append("  </table>");
         sb.append("</td>\n");
         sb.append("</tr>\n");
       }
@@ -130,5 +151,10 @@ public class ShowTrace extends Basic {
     }
     sb.append("</table>\n");
     sb.append("</div>\n");
+  }
+  
+  @Override
+  protected String getBodyAttributes() {
+    return " onload=\"" + pageLoadFunctionName + "()\" ";
   }
 }

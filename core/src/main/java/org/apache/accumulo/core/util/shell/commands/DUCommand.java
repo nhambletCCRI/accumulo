@@ -25,6 +25,7 @@ import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.ConfigurationCopy;
 import org.apache.accumulo.core.util.TableDiskUsage;
+import org.apache.accumulo.core.util.TableDiskUsage.Printer;
 import org.apache.accumulo.core.util.shell.Shell;
 import org.apache.accumulo.core.util.shell.Shell.Command;
 import org.apache.commons.cli.CommandLine;
@@ -35,19 +36,37 @@ import org.apache.hadoop.fs.FileSystem;
 
 public class DUCommand extends Command {
   
-  private Option optTablePattern;
-  
-  public int execute(String fullCommand, CommandLine cl, Shell shellState) throws IOException, TableNotFoundException {
-    
-    SortedSet<String> tablesToFlush = new TreeSet<String>(Arrays.asList(cl.getArgs()));
+  private Option optTablePattern, optHumanReadble;
+
+  public int execute(final String fullCommand, final CommandLine cl, final Shell shellState) throws IOException, TableNotFoundException {
+
+    final SortedSet<String> tablesToFlush = new TreeSet<String>(Arrays.asList(cl.getArgs()));
+
+    boolean prettyPrint = cl.hasOption(optHumanReadble.getOpt()) ? true : false;
+
     if (cl.hasOption(optTablePattern.getOpt())) {
-      for (String table : shellState.getConnector().tableOperations().list())
-        if (table.matches(cl.getOptionValue(optTablePattern.getOpt())))
+      for (String table : shellState.getConnector().tableOperations().list()) {
+        if (table.matches(cl.getOptionValue(optTablePattern.getOpt()))) {
           tablesToFlush.add(table);
+        }
+      }
+    } else {
+      shellState.checkTableState();
+      tablesToFlush.add(shellState.getTableName());
     }
     try {
-      AccumuloConfiguration acuConf = new ConfigurationCopy(shellState.getConnector().instanceOperations().getSystemConfiguration());
-      TableDiskUsage.printDiskUsage(acuConf, tablesToFlush, FileSystem.get(new Configuration()), shellState.getConnector());
+      final AccumuloConfiguration acuConf = new ConfigurationCopy(shellState.getConnector().instanceOperations().getSystemConfiguration());
+      TableDiskUsage.printDiskUsage(acuConf, tablesToFlush, FileSystem.get(new Configuration()), shellState.getConnector(), new Printer() {
+        @Override
+        public void print(String line) {
+          try {
+            shellState.getReader().printString(line + "\n");
+          } catch (IOException ex) {
+            throw new RuntimeException(ex);
+          }
+        }
+        
+      }, prettyPrint);
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
@@ -56,17 +75,21 @@ public class DUCommand extends Command {
   
   @Override
   public String description() {
-    return "prints how much space is used by files referenced by a table.  When multiple tables are specified it prints how much space is used by files shared between tables, if any.";
+    return "prints how much space, in bytes, is used by files referenced by a table.  When multiple tables are specified it prints how much space, in bytes, is used by files shared between tables, if any.";
   }
   
   @Override
   public Options getOptions() {
-    Options o = new Options();
+    final Options o = new Options();
     
     optTablePattern = new Option("p", "pattern", true, "regex pattern of table names");
     optTablePattern.setArgName("pattern");
-    
+
+    optHumanReadble = new Option("h", "human-readable", false, "format large sizes to human readable units");
+    optHumanReadble.setArgName("human readable output");
+
     o.addOption(optTablePattern);
+    o.addOption(optHumanReadble);
     
     return o;
   }

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -22,11 +22,16 @@ import static org.apache.accumulo.server.logger.LogEvents.DEFINE_TABLET;
 import static org.apache.accumulo.server.logger.LogEvents.MANY_MUTATIONS;
 import static org.apache.accumulo.server.logger.LogEvents.OPEN;
 
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -37,15 +42,21 @@ import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Mutation;
-import org.apache.accumulo.core.tabletserver.thrift.TabletMutations;
 import org.apache.accumulo.core.util.Daemon;
 import org.apache.accumulo.core.util.StringUtil;
 import org.apache.accumulo.server.logger.LogFileKey;
 import org.apache.accumulo.server.logger.LogFileValue;
 import org.apache.accumulo.server.master.state.TServerInstance;
+import org.apache.accumulo.server.tabletserver.TabletMutations;
+import org.apache.accumulo.server.trace.TraceFileSystem;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+//import org.apache.hadoop.fs.CreateFlag;
+//import org.apache.hadoop.fs.Syncable;
+import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.util.Progressable;
 import org.apache.log4j.Logger;
 
 /**
@@ -53,16 +64,19 @@ import org.apache.log4j.Logger;
  * 
  */
 public class DfsLogger {
+  // Package private so that LogSorter can find this
+  static final String LOG_FILE_HEADER_V2 = "--- Log File Header (v2) ---";
+  
   private static Logger log = Logger.getLogger(DfsLogger.class);
   
   public static class LogClosedException extends IOException {
     private static final long serialVersionUID = 1L;
-
+    
     public LogClosedException() {
       super("LogClosed");
     }
   }
-
+  
   public interface ServerResources {
     AccumuloConfiguration getConfiguration();
     
@@ -70,19 +84,19 @@ public class DfsLogger {
     
     Set<TServerInstance> getCurrentTServers();
   }
-
-  private LinkedBlockingQueue<DfsLogger.LogWork> workQueue = new LinkedBlockingQueue<DfsLogger.LogWork>();
   
-  private String closeLock = new String("foo");
+  private final LinkedBlockingQueue<DfsLogger.LogWork> workQueue = new LinkedBlockingQueue<DfsLogger.LogWork>();
+  
+  private final Object closeLock = new Object();
   
   private static final DfsLogger.LogWork CLOSED_MARKER = new DfsLogger.LogWork(null, null);
   
   private static final LogFileValue EMPTY = new LogFileValue();
   
   private boolean closed = false;
-
+  
   private class LogSyncingTask implements Runnable {
-
+    
     @Override
     public void run() {
       ArrayList<DfsLogger.LogWork> work = new ArrayList<DfsLogger.LogWork>();
@@ -99,8 +113,8 @@ public class DfsLogger {
         synchronized (closeLock) {
           if (!closed) {
             try {
-              logFile.sync();
-            } catch (IOException ex) {
+              sync.invoke(logFile);
+            } catch (Exception ex) {
               log.warn("Exception syncing " + ex);
               for (DfsLogger.LogWork logWork : work) {
                 logWork.exception = ex;
@@ -129,7 +143,7 @@ public class DfsLogger {
       }
     }
   }
-
+  
   static class LogWork {
     List<TabletMutations> mutations;
     CountDownLatch latch;
@@ -140,9 +154,9 @@ public class DfsLogger {
       this.latch = latch;
     }
   }
-
+  
   public static class LoggerOperation {
-    private LogWork work;
+    private final LogWork work;
     
     public LoggerOperation(LogWork work) {
       this.work = work;
@@ -165,8 +179,10 @@ public class DfsLogger {
       }
     }
   }
-
-  /* (non-Javadoc)
+  
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.server.tabletserver.log.IRemoteLogger#equals(java.lang.Object)
    */
   @Override
@@ -179,7 +195,9 @@ public class DfsLogger {
     return false;
   }
   
-  /* (non-Javadoc)
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.server.tabletserver.log.IRemoteLogger#hashCode()
    */
   @Override
@@ -188,8 +206,10 @@ public class DfsLogger {
     return getFileName().hashCode();
   }
   
-  private ServerResources conf;
+  private final ServerResources conf;
   private FSDataOutputStream logFile;
+  private DataOutputStream encryptingLogFile = null;
+  private Method sync;
   private Path logPath;
   private String logger;
   
@@ -202,29 +222,99 @@ public class DfsLogger {
     this.logger = logger;
     this.logPath = new Path(Constants.getWalDirectory(conf.getConfiguration()), filename);
   }
-
+  
+  public static FSDataInputStream readHeader(FileSystem fs, Path path, Map<String,String> opts) throws IOException {
+    FSDataInputStream file = fs.open(path);
+    try {
+      byte[] magic = LOG_FILE_HEADER_V2.getBytes();
+      byte[] buffer = new byte[magic.length];
+      file.readFully(buffer);
+      if (Arrays.equals(buffer, magic)) {
+        int count = file.readInt();
+        for (int i = 0; i < count; i++) {
+          String key = file.readUTF();
+          String value = file.readUTF();
+          opts.put(key, value);
+        }
+      } else {
+        file.seek(0);
+        return file;
+      }
+      return file;
+    } catch (IOException ex) {
+      file.seek(0);
+      return file;
+    }
+  }
+  
   public synchronized void open(String address) throws IOException {
     String filename = UUID.randomUUID().toString();
     logger = StringUtil.join(Arrays.asList(address.split(":")), "+");
-
+    
+    log.debug("DfsLogger.open() begin");
+    
     logPath = new Path(Constants.getWalDirectory(conf.getConfiguration()) + "/" + logger + "/" + filename);
     try {
       FileSystem fs = conf.getFileSystem();
       short replication = (short) conf.getConfiguration().getCount(Property.TSERV_WAL_REPLICATION);
       if (replication == 0)
-        replication = (short) fs.getDefaultReplication();
+        replication = fs.getDefaultReplication();
       long blockSize = conf.getConfiguration().getMemoryInBytes(Property.TSERV_WAL_BLOCKSIZE);
       if (blockSize == 0)
         blockSize = (long) (conf.getConfiguration().getMemoryInBytes(Property.TSERV_WALOG_MAX_SIZE) * 1.1);
       int checkSum = fs.getConf().getInt("io.bytes.per.checksum", 512);
       blockSize -= blockSize % checkSum;
       blockSize = Math.max(blockSize, checkSum);
-      logFile = fs.create(logPath, true, fs.getConf().getInt("io.file.buffer.size", 4096), replication, blockSize);
+      if (conf.getConfiguration().getBoolean(Property.TSERV_WAL_SYNC))
+        logFile = create(fs, logPath, true, fs.getConf().getInt("io.file.buffer.size", 4096), replication, blockSize);
+      else
+        logFile = fs.create(logPath, true, fs.getConf().getInt("io.file.buffer.size", 4096), replication, blockSize);
+      
+      try {
+        // sync: send data to datanodes
+        sync = logFile.getClass().getMethod("sync");
+        try {
+          // hsych: send data to datanodes and sync the data to disk
+          sync = logFile.getClass().getMethod("hsync");
+        } catch (NoSuchMethodException ex) {
+        }
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+      
+      
+      // Initialize the crypto operations.
+      @SuppressWarnings("deprecation")
+      org.apache.accumulo.core.security.crypto.CryptoModule cryptoModule = org.apache.accumulo.core.security.crypto.CryptoModuleFactory.getCryptoModule(conf
+          .getConfiguration().get(Property.CRYPTO_MODULE_CLASS));
+      
+      // Initialize the log file with a header and the crypto params used to set up this log file.
+      logFile.write(LOG_FILE_HEADER_V2.getBytes());
+      Map<String,String> cryptoOpts = conf.getConfiguration().getAllPropertiesWithPrefix(Property.CRYPTO_PREFIX);
+      
+      logFile.writeInt(cryptoOpts.size());
+      for (String key : cryptoOpts.keySet()) {
+        logFile.writeUTF(key);
+        logFile.writeUTF(cryptoOpts.get(key));
+      }
+      
+      @SuppressWarnings("deprecation")
+      OutputStream encipheringOutputStream = cryptoModule.getEncryptingOutputStream(logFile, cryptoOpts);
+      
+      // If the module just kicks back our original stream, then just use it, don't wrap it in
+      // another data OutputStream.
+      if (encipheringOutputStream == logFile) {
+        encryptingLogFile = logFile;
+      } else {
+        encryptingLogFile = new DataOutputStream(encipheringOutputStream);
+      }
+      
       LogFileKey key = new LogFileKey();
       key.event = OPEN;
       key.tserverSession = filename;
       key.filename = filename;
       write(key, EMPTY);
+      logFile.sync();
       log.debug("Got new write-ahead log: " + this);
     } catch (IOException ex) {
       if (logFile != null)
@@ -238,7 +328,46 @@ public class DfsLogger {
     t.start();
   }
   
-  /* (non-Javadoc)
+  private FSDataOutputStream create(FileSystem fs, Path logPath, boolean b, int buffersize, short replication, long blockSize) throws IOException {
+    try {
+      // This... 
+      //    EnumSet<CreateFlag> set = EnumSet.of(CreateFlag.SYNC_BLOCK, CreateFlag.CREATE);
+      //    return fs.create(logPath, FsPermission.getDefault(), set, buffersize, replication, blockSize, null);
+      // Becomes this:
+      Class<?> createFlags = Class.forName("org.apache.hadoop.fs.CreateFlag");
+      List<Enum<?>> flags = new ArrayList<Enum<?>>();
+      if (createFlags.isEnum()) {
+        for (Object constant : createFlags.getEnumConstants()) {
+          if (constant.toString().equals("SYNC_BLOCK")) {
+            flags.add((Enum<?>)constant);
+            log.debug("Found synch enum " + constant);
+          }
+          if (constant.toString().equals("CREATE")) {
+            flags.add((Enum<?>)constant);
+            log.debug("Found CREATE enum " + constant);
+          }
+        }
+      }
+      Object set = EnumSet.class.getMethod("of", java.lang.Enum.class, java.lang.Enum.class).invoke(null, flags.get(0), flags.get(1));
+      log.debug("CreateFlag set: " + set);
+      if (fs instanceof TraceFileSystem) {
+        fs = ((TraceFileSystem)fs).getImplementation();
+      }
+      Method create = fs.getClass().getMethod("create", Path.class, FsPermission.class, EnumSet.class, Integer.TYPE, Short.TYPE, Long.TYPE, Progressable.class);
+      log.debug("creating " + logPath + " with SYNCH_BLOCK flag");
+      return (FSDataOutputStream)create.invoke(fs, logPath, FsPermission.getDefault(), set, buffersize, replication, blockSize, null);
+    } catch (ClassNotFoundException ex) {
+      // Expected in hadoop 1.0
+      return fs.create(logPath, b, buffersize, replication, blockSize);
+    } catch (Exception ex) {
+      log.debug(ex, ex);
+      return fs.create(logPath, b, buffersize, replication, blockSize);
+    }
+  }
+
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.server.tabletserver.log.IRemoteLogger#toString()
    */
   @Override
@@ -273,7 +402,7 @@ public class DfsLogger {
           log.info("Interrupted");
         }
     }
-
+    
     if (logFile != null)
       try {
         logFile.close();
@@ -305,12 +434,12 @@ public class DfsLogger {
    * @throws IOException
    */
   private synchronized void write(LogFileKey key, LogFileValue value) throws IOException {
-    key.write(logFile);
-    value.write(logFile);
+    key.write(encryptingLogFile);
+    value.write(encryptingLogFile);
   }
-
+  
   public LoggerOperation log(int seq, int tid, Mutation mutation) throws IOException {
-    return logManyTablets(Collections.singletonList(new TabletMutations(tid, seq, Collections.singletonList(mutation.toThrift()))));
+    return logManyTablets(Collections.singletonList(new TabletMutations(tid, seq, Collections.singletonList(mutation))));
   }
   
   public LoggerOperation logManyTablets(List<TabletMutations> mutations) throws IOException {
@@ -318,16 +447,13 @@ public class DfsLogger {
     
     synchronized (DfsLogger.this) {
       try {
-        for (TabletMutations mutation : mutations) {
+        for (TabletMutations tabletMutations : mutations) {
           LogFileKey key = new LogFileKey();
           key.event = MANY_MUTATIONS;
-          key.seq = mutation.seq;
-          key.tid = mutation.tabletID;
+          key.seq = tabletMutations.getSeq();
+          key.tid = tabletMutations.getTid();
           LogFileValue value = new LogFileValue();
-          Mutation[] m = new Mutation[mutation.mutations.size()];
-          for (int i = 0; i < m.length; i++)
-            m[i] = new Mutation(mutation.mutations.get(i));
-          value.mutations = m;
+          value.mutations = tabletMutations.getMutations();
           write(key, value);
         }
       } catch (Exception e) {
@@ -335,16 +461,16 @@ public class DfsLogger {
         work.exception = e;
       }
     }
-
+    
     synchronized (closeLock) {
       // use a different lock for close check so that adding to work queue does not need
       // to wait on walog I/O operations
-
+      
       if (closed)
         throw new LogClosedException();
       workQueue.add(work);
     }
-
+    
     return new LoggerOperation(work);
   }
   

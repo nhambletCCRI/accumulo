@@ -80,6 +80,16 @@ public class TableOperationsHelperTest {
     }
     
     @Override
+    public Collection<Text> listSplits(String tableName) throws TableNotFoundException {
+      return null;
+    }
+    
+    @Override
+    public Collection<Text> listSplits(String tableName, int maxSplits) throws TableNotFoundException {
+      return null;
+    }
+    
+    @Override
     public Text getMaxRow(String tableName, Authorizations auths, Text startRow, boolean startInclusive, Text endRow, boolean endInclusive)
         throws TableNotFoundException, AccumuloException, AccumuloSecurityException {
       return null;
@@ -112,6 +122,7 @@ public class TableOperationsHelperTest {
     public void rename(String oldTableName, String newTableName) throws AccumuloSecurityException, TableNotFoundException, AccumuloException,
         TableExistsException {}
     
+    @Deprecated
     @Override
     public void flush(String tableName) throws AccumuloException, AccumuloSecurityException {}
     
@@ -173,7 +184,12 @@ public class TableOperationsHelperTest {
     public Map<String,String> tableIdMap() {
       return null;
     }
-    
+
+    @Override
+    public List<DiskUsage> getDiskUsage(Set<String> tables) throws AccumuloException, AccumuloSecurityException, TableNotFoundException {
+      return null;
+    }
+
     void check(String tablename, String[] values) {
       Map<String,String> expected = new TreeMap<String,String>();
       for (String value : values) {
@@ -181,6 +197,21 @@ public class TableOperationsHelperTest {
         expected.put(parts[0], parts[1]);
       }
       Assert.assertEquals(expected, settings.get(tablename));
+    }
+    
+    @Override
+    public void importTable(String tableName, String exportDir) throws TableExistsException, AccumuloException, AccumuloSecurityException {}
+    
+    @Override
+    public void exportTable(String tableName, String exportDir) throws TableNotFoundException, AccumuloException, AccumuloSecurityException {}
+    
+    @Override
+    public void cancelCompaction(String tableName) throws AccumuloSecurityException, TableNotFoundException, AccumuloException {}
+    
+    @Override
+    public boolean testClassLoad(String tableName, String className, String asTypeName) throws AccumuloException, AccumuloSecurityException,
+        TableNotFoundException {
+      return false;
     }
   }
   
@@ -236,18 +267,18 @@ public class TableOperationsHelperTest {
     try {
       t.attachIterator("table", setting);
       Assert.fail();
-    } catch (IllegalArgumentException e) {}
+    } catch (AccumuloException e) {}
     setting.setName("thirdName");
     try {
       t.attachIterator("table", setting);
       Assert.fail();
-    } catch (IllegalArgumentException e) {}
+    } catch (AccumuloException e) {}
     setting.setPriority(10);
     t.setProperty("table", "table.iterator.minc.thirdName.opt.key", "value");
     try {
       t.attachIterator("table", setting);
       Assert.fail();
-    } catch (IllegalArgumentException e) {}
+    } catch (AccumuloException e) {}
     t.removeProperty("table", "table.iterator.minc.thirdName.opt.key");
     t.attachIterator("table", setting);
   }

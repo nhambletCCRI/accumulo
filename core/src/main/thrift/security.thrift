@@ -15,7 +15,11 @@
 * limitations under the License.
 */
 namespace java org.apache.accumulo.core.security.thrift
+namespace cpp org.apache.accumulo.core.security.thrift
 
+/**
+@deprecated since 1.5, see org.apache.accumulo.core.client.impl.thrift.SecurityErrorCode
+*/
 enum SecurityErrorCode {
     DEFAULT_SECURITY_ERROR = 0,
     BAD_CREDENTIALS = 1,
@@ -26,15 +30,36 @@ enum SecurityErrorCode {
     GRANT_INVALID = 6,
     BAD_AUTHORIZATIONS = 7,
     INVALID_INSTANCEID = 8,
-    TABLE_DOESNT_EXIST = 9
+    TABLE_DOESNT_EXIST = 9,
+    UNSUPPORTED_OPERATION = 10,
+    INVALID_TOKEN = 11,
+    AUTHENTICATOR_FAILED = 12,
+    AUTHORIZOR_FAILED = 13,
+    PERMISSIONHANDLER_FAILED = 14,
+    TOKEN_EXPIRED = 15
+    SERIALIZATION_ERROR = 16;
+    INSUFFICIENT_PROPERTIES = 17;
 }
 
+/**
+@deprecated since 1.5
+*/
 struct AuthInfo {
     1:string user,
     2:binary password,
     3:string instanceId
 }
 
+struct TCredentials {
+    1:string principal,
+    2:string tokenClassName,
+    3:binary token,
+    4:string instanceId
+}
+
+/**
+@deprecated since 1.5, see org.apache.accumulo.core.client.impl.thrift.ThriftSecurityException
+*/
 exception ThriftSecurityException {
     1:string user,
     2:SecurityErrorCode code

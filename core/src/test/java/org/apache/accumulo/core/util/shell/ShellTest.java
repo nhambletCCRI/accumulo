@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -24,15 +24,19 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import jline.ConsoleReader;
 
+import org.apache.accumulo.core.util.format.DateStringFormatter;
 import org.apache.log4j.Level;
 import org.junit.Before;
 import org.junit.Test;
 
 public class ShellTest {
-  static class TestOutputStream extends OutputStream {
+  public static class TestOutputStream extends OutputStream {
     StringBuilder sb = new StringBuilder();
     
     @Override
@@ -83,7 +87,7 @@ public class ShellTest {
     output = new TestOutputStream();
     shell = new Shell(new ConsoleReader(new FileInputStream(FileDescriptor.in), new OutputStreamWriter(output)));
     shell.setLogErrorsToConsole();
-    shell.config("--fake", "-p", "pass");
+    shell.config("--fake", "-u", "test", "-p", "secret");
   }
   
   void assertGoodExit(String s, boolean stringPresent) {
@@ -142,5 +146,99 @@ public class ShellTest {
     exec("delete \\x90 \\xa0 \\xb0", true);
     exec("scan", true, "\\x90 \\xA0:\\xB0 []    \\xC0", false);
     exec("deletetable test -f", true, "Table: [test] has been deleted");
+  }
+  
+  @Test
+  public void authsTest() throws Exception {
+    Shell.log.debug("Starting auths test --------------------------");
+    exec("setauths x,y,z", false, "Missing required option");
+    exec("setauths -s x,y,z -u notauser", false, "user does not exist");
+    exec("setauths -s y,z,x", true);
+    exec("getauths -u notauser", false, "user does not exist");
+    exec("getauths", true, "x,y,z");
+    exec("addauths -u notauser", false, "Missing required option");
+    exec("addauths -u notauser -s foo", false, "user does not exist");
+    exec("addauths -s a", true);
+    exec("getauths", true, "a,x,y,z");
+    exec("setauths -c", true);
+  }
+  
+  @Test
+  public void userTest() throws Exception {
+    Shell.log.debug("Starting user test --------------------------");
+    // Test cannot be done via junit because createuser only prompts for password
+    // exec("createuser root", false, "user exists");
+  }
+  
+  @Test
+  public void duContextTest() throws Exception {
+    Shell.log.debug("Starting du context test --------------------------");
+    exec("createtable t", true);
+    exec("du", true, "0 [t]");
+    exec("deletetable t -f", true, "Table: [t] has been deleted");
+  }
+  
+  @Test
+  public void duTest() throws IOException {
+    Shell.log.debug("Starting DU test --------------------------");
+    exec("createtable t", true);
+    exec("du t", true, "0 [t]");
+    exec("deletetable t -f", true, "Table: [t] has been deleted");
+  }
+  
+  @Test
+  public void duPatternTest() throws IOException {
+    Shell.log.debug("Starting DU with pattern test --------------------------");
+    exec("createtable t", true);
+    exec("createtable tt", true);
+    exec("du -p t.*", true, "0 [t, tt]");
+    exec("deletetable t -f", true, "Table: [t] has been deleted");
+    exec("deletetable tt -f", true, "Table: [tt] has been deleted");
+  }
+  
+  @Test
+  public void scanDateStringFormatterTest() throws IOException {
+    Shell.log.debug("Starting scan dateStringFormatter test --------------------------");
+    exec("createtable t", true);
+    exec("insert r f q v -ts 0", true);
+    DateFormat dateFormat = new SimpleDateFormat(DateStringFormatter.DATE_FORMAT);
+    String expected = String.format("r f:q [] %s    v", dateFormat.format(new Date(0)));
+    exec("scan -fm org.apache.accumulo.core.util.format.DateStringFormatter -st", true, expected);
+    exec("deletetable t -f", true, "Table: [t] has been deleted");
+  }
+  
+  @Test
+  public void commentTest() throws IOException {
+    Shell.log.debug("Starting comment test --------------------------");
+    exec("#", true, "Unknown command", false);
+    exec("# foo", true, "Unknown command", false);
+    exec("- foo", true, "Unknown command", true);
+  }
+  
+  @Test
+  public void execFileTest() throws IOException {
+    Shell.log.debug("Starting exec file test --------------------------");
+    shell.config("--fake", "-u", "test", "-p", "secret", "-f", "src/test/resources/shelltest.txt");
+    assertEquals(0, shell.start());
+    assertGoodExit("Unknown command", false);
+  }
+  
+  @Test
+  public void setIterTest() throws IOException {
+    Shell.log.debug("Starting setiter test --------------------------");
+    exec("createtable t", true);
+    
+    String cmdJustClass = "setiter -class VersioningIterator -p 1";
+    exec(cmdJustClass, false, "java.lang.IllegalArgumentException", false);
+    exec(cmdJustClass, false, "fully qualified package name", true);
+    
+    String cmdFullPackage = "setiter -class o.a.a.foo -p 1";
+    exec(cmdFullPackage, false, "java.lang.IllegalArgumentException", false);
+    exec(cmdFullPackage, false, "class not found", true);
+    
+    String cmdNoOption = "setiter -class java.lang.String -p 1";
+    exec(cmdNoOption, false, "Loaded", true);
+    
+    exec("deletetable t -f", true, "Table: [t] has been deleted");
   }
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -21,6 +21,7 @@ package org.apache.accumulo.core.iterators;
  * 
  * @deprecated since 1.4, replaced by {@link org.apache.accumulo.core.iterators.user.RowDeletingIterator}
  */
+@Deprecated
 public class RowDeletingIterator extends org.apache.accumulo.core.iterators.user.RowDeletingIterator {
   
 }

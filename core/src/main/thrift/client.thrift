@@ -15,9 +15,10 @@
 * limitations under the License.
 */
 namespace java org.apache.accumulo.core.client.impl.thrift
+namespace cpp org.apache.accumulo.core.client.impl.thrift
 
 include "security.thrift"
-include "cloudtrace.thrift"
+include "trace.thrift"
 
 enum TableOperation {
     CREATE,
@@ -34,6 +35,9 @@ enum TableOperation {
     DELETE_RANGE,
     BULK_IMPORT,
     COMPACT
+    IMPORT
+    EXPORT
+    COMPACT_CANCEL
 }
 
 enum TableOperationExceptionType {
@@ -52,12 +56,43 @@ enum ConfigurationType {
     DEFAULT
 }
 
+enum SecurityErrorCode {
+    DEFAULT_SECURITY_ERROR = 0,
+    BAD_CREDENTIALS = 1,
+    PERMISSION_DENIED = 2,
+    USER_DOESNT_EXIST = 3,
+    CONNECTION_ERROR = 4,
+    USER_EXISTS = 5,
+    GRANT_INVALID = 6,
+    BAD_AUTHORIZATIONS = 7,
+    INVALID_INSTANCEID = 8,
+    TABLE_DOESNT_EXIST = 9,
+    UNSUPPORTED_OPERATION = 10,
+    INVALID_TOKEN = 11,
+    AUTHENTICATOR_FAILED = 12,
+    AUTHORIZOR_FAILED = 13,
+    PERMISSIONHANDLER_FAILED = 14,
+    TOKEN_EXPIRED = 15
+    SERIALIZATION_ERROR = 16;
+    INSUFFICIENT_PROPERTIES = 17;
+}
+
+exception ThriftSecurityException {
+    1:string user,
+    2:SecurityErrorCode code
+}
+
 exception ThriftTableOperationException {
     1:string tableId,
     2:string tableName,
     3:TableOperation op,
     4:TableOperationExceptionType type,
     5:string description
+}
+
+struct TDiskUsage {
+    1:list<string> tables
+    2:i64 usage
 }
 
 service ClientService {
@@ -67,28 +102,46 @@ service ClientService {
     string getInstanceId()
     string getZooKeepers()
     
-    list<string> bulkImportFiles(1:cloudtrace.TInfo tinfo, 2:security.AuthInfo credentials, 3:i64 tid, 4:string tableId, 5:list<string> files, 6:string errorDir, 7:bool setTime) throws (1:security.ThriftSecurityException sec, 2:ThriftTableOperationException tope);
+    list<string> bulkImportFiles(1:trace.TInfo tinfo, 8:security.TCredentials credentials, 3:i64 tid, 4:string tableId, 5:list<string> files, 6:string errorDir, 7:bool setTime) throws (1:ThriftSecurityException sec, 2:ThriftTableOperationException tope);
     // ensures that nobody is working on the transaction id above
-    bool isActive(1:cloudtrace.TInfo tinfo, 2:i64 tid),
+    bool isActive(1:trace.TInfo tinfo, 2:i64 tid),
 
-    void ping(1:security.AuthInfo credentials) throws (1:security.ThriftSecurityException sec)
+    void ping(2:security.TCredentials credentials) throws (1:ThriftSecurityException sec)
+
+    list<TDiskUsage> getDiskUsage(2:set<string> tables, 1:security.TCredentials credentials) throws (1:ThriftSecurityException sec, 2:ThriftTableOperationException toe)
 
     // user management methods
-    bool authenticateUser(4:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:binary password) throws (1:security.ThriftSecurityException sec)
-    set<string> listUsers(2:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials) throws (1:security.ThriftSecurityException sec)
-    void createUser(5:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:binary password, 4:list<binary> authorizations) throws (1:security.ThriftSecurityException sec)
-    void dropUser(3:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user) throws (1:security.ThriftSecurityException sec)
-    void changePassword(4:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:binary password) throws (1:security.ThriftSecurityException sec)
-    void changeAuthorizations(4:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:list<binary> authorizations) throws (1:security.ThriftSecurityException sec)
-    list<binary> getUserAuthorizations(3:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user) throws (1:security.ThriftSecurityException sec)
-    bool hasSystemPermission(4:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:byte sysPerm) throws (1:security.ThriftSecurityException sec)
-    bool hasTablePermission(5:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:string tableName, 4:byte tblPerm) throws (1:security.ThriftSecurityException sec, 2:ThriftTableOperationException tope)
-    void grantSystemPermission(4:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:byte permission) throws (1:security.ThriftSecurityException sec)
-    void revokeSystemPermission(4:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:byte permission) throws (1:security.ThriftSecurityException sec)
-    void grantTablePermission(5:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:string tableName, 4:byte permission) throws (1:security.ThriftSecurityException sec, 2:ThriftTableOperationException tope)
-    void revokeTablePermission(5:cloudtrace.TInfo tinfo, 1:security.AuthInfo credentials, 2:string user, 3:string tableName, 4:byte permission) throws (1:security.ThriftSecurityException sec, 2:ThriftTableOperationException tope)
-    
-    map<string, string> getConfiguration(1:ConfigurationType type);
-    map<string, string> getTableConfiguration(2:string tableName) throws (1:ThriftTableOperationException tope);
-    bool checkClass(1:cloudtrace.TInfo tinfo, 2:string className, 3:string interfaceMatch);
+    set<string> listLocalUsers(2:trace.TInfo tinfo, 3:security.TCredentials credentials) throws (1:ThriftSecurityException sec)
+    void createLocalUser(5:trace.TInfo tinfo, 6:security.TCredentials credentials, 2:string principal, 3:binary password) throws (1:ThriftSecurityException sec)
+    void dropLocalUser(3:trace.TInfo tinfo, 4:security.TCredentials credentials, 2:string principal) throws (1:ThriftSecurityException sec)
+    void changeLocalUserPassword(4:trace.TInfo tinfo, 5:security.TCredentials credentials, 2:string principal, 3:binary password) throws (1:ThriftSecurityException sec)
+
+    // authentication-related methods
+    bool authenticate(1:trace.TInfo tinfo, 2:security.TCredentials credentials) throws (1:ThriftSecurityException sec)
+    bool authenticateUser(1:trace.TInfo tinfo, 2:security.TCredentials credentials, 3:security.TCredentials toAuth) throws (1:ThriftSecurityException sec)
+
+    // authorization-related methods
+    void changeAuthorizations(4:trace.TInfo tinfo, 5:security.TCredentials credentials, 2:string principal, 3:list<binary> authorizations) throws (1:ThriftSecurityException sec)
+    list<binary> getUserAuthorizations(3:trace.TInfo tinfo, 4:security.TCredentials credentials, 2:string principal) throws (1:ThriftSecurityException sec)
+
+    // permissions-related methods
+    bool hasSystemPermission(4:trace.TInfo tinfo, 5:security.TCredentials credentials, 2:string principal, 3:byte sysPerm) throws (1:ThriftSecurityException sec)
+    bool hasTablePermission(5:trace.TInfo tinfo, 6:security.TCredentials credentials, 2:string principal, 3:string tableName, 4:byte tblPerm) throws (1:ThriftSecurityException sec, 2:ThriftTableOperationException tope)
+    void grantSystemPermission(4:trace.TInfo tinfo, 5:security.TCredentials credentials, 2:string principal, 3:byte permission) throws (1:ThriftSecurityException sec)
+    void revokeSystemPermission(4:trace.TInfo tinfo, 5:security.TCredentials credentials, 2:string principal, 3:byte permission) throws (1:ThriftSecurityException sec)
+    void grantTablePermission(5:trace.TInfo tinfo, 6:security.TCredentials credentials, 2:string principal, 3:string tableName, 4:byte permission) throws (1:ThriftSecurityException sec, 2:ThriftTableOperationException tope)
+    void revokeTablePermission(5:trace.TInfo tinfo, 6:security.TCredentials credentials, 2:string principal, 3:string tableName, 4:byte permission) throws (1:ThriftSecurityException sec, 2:ThriftTableOperationException tope)
+
+    // configuration methods
+    map<string, string> getConfiguration(2:trace.TInfo tinfo, 3:security.TCredentials credentials, 1:ConfigurationType type);
+    map<string, string> getTableConfiguration(1:trace.TInfo tinfo, 3:security.TCredentials credentials, 2:string tableName) throws (1:ThriftTableOperationException tope);
+    bool checkClass(1:trace.TInfo tinfo, 4:security.TCredentials credentials, 2:string className, 3:string interfaceMatch);
+    bool checkTableClass(1:trace.TInfo tinfo, 5:security.TCredentials credentials, 2:string tableId, 3:string className, 4:string interfaceMatch) throws (1:ThriftSecurityException sec, 2:ThriftTableOperationException tope);
+}
+
+// Only used for a unit test
+service ThriftTest {
+  bool success();
+  bool fails();
+  bool throwsError() throws (1:ThriftSecurityException ex);
 }

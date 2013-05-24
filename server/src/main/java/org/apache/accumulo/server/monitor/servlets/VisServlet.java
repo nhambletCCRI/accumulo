@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -17,7 +17,6 @@
 package org.apache.accumulo.server.monitor.servlets;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 
@@ -119,8 +118,8 @@ public class VisServlet extends BasicServlet {
   protected void pageBody(HttpServletRequest req, HttpServletResponse response, StringBuilder sb) throws IOException {
     StringBuffer urlsb = req.getRequestURL();
     urlsb.setLength(urlsb.lastIndexOf("/") + 1);
-    String url = urlsb.toString();
     VisualizationConfig cfg = new VisualizationConfig();
+    cfg.url = urlsb.toString();
     
     String s = req.getParameter("shape");
     if (s != null && (s.equals("square") || s.equals("squares"))) {
@@ -177,7 +176,8 @@ public class VisServlet extends BasicServlet {
         .append(">80</option></select></span>\n");
     // motion select box
     sb.append("&nbsp;&nbsp<span class='viscontrol'>Motion: <select id='motion' onchange='setMotion(this)'>");
-    addOptions(sb, cfg.motion);
+    sb.append("<option selected='true'></option>");
+    addOptions(sb, null);
     sb.append("</select></span>\n");
     // color select box
     sb.append("&nbsp;&nbsp<span class='viscontrol'>Color: <select id='color' onchange='setColor(this)'>");
@@ -231,18 +231,6 @@ public class VisServlet extends BasicServlet {
     sb.append("var numNormalStats = ").append(StatType.values().length - StatType.numDerived()).append(";\n");
     sb.append("</script>\n");
     
-    InputStream data = VisServlet.class.getClassLoader().getResourceAsStream("web/vis.xml");
-    if (data != null) {
-      byte[] buffer = new byte[1024];
-      int n;
-      try {
-        while ((n = data.read(buffer)) > 0)
-          sb.append(new String(buffer, 0, n));
-      } catch (IOException e) {
-        e.printStackTrace();
-        return;
-      }
-    }
-    sb.append("\n");
+    sb.append("<script src='web/vis.js' type='text/javascript'></script>");
   }
 }

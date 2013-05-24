@@ -39,14 +39,15 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 
-//TODO use zoocache?
-//TODO handle zookeeper being down gracefully
-//TODO document zookeeper layout
+//TODO use zoocache? - ACCUMULO-1297
+//TODO handle zookeeper being down gracefully - ACCUMULO-1297
+//TODO document zookeeper layout - ACCUMULO-1298
 
 public class ZooStore<T> implements TStore<T> {
   
   private String path;
   private IZooReaderWriter zk;
+  private String lastReserved = "";
   private Set<Long> reserved;
   private Map<Long,Long> defered;
   private SecureRandom idgenerator;
@@ -65,7 +66,6 @@ public class ZooStore<T> implements TStore<T> {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
-    
   }
   
   private Object deserialize(byte ser[]) {
@@ -102,7 +102,7 @@ public class ZooStore<T> implements TStore<T> {
     while (true) {
       try {
         // looking at the code for SecureRandom, it appears to be thread safe
-        long tid = Math.abs(idgenerator.nextLong());
+        long tid = idgenerator.nextLong() & 0x7fffffffffffffffl;
         zk.putPersistentData(getTXPath(tid), TStatus.NEW.name().getBytes(), NodeExistsPolicy.FAIL);
         return tid;
       } catch (NodeExistsException nee) {
@@ -123,20 +123,33 @@ public class ZooStore<T> implements TStore<T> {
           events = statusChangeEvents;
         }
         
-        List<String> txdirs = zk.getChildren(path);
+        List<String> txdirs = new ArrayList<String>(zk.getChildren(path));
+        Collections.sort(txdirs);
+        
+        synchronized (this) {
+          if (txdirs.size() > 0 && txdirs.get(txdirs.size() - 1).compareTo(lastReserved) <= 0)
+            lastReserved = "";
+        }
         
         for (String txdir : txdirs) {
           long tid = parseTid(txdir);
           
           synchronized (this) {
+            // this check makes reserve pick up where it left off, so that it cycles through all as it is repeatedly called.... failing to do so can lead to
+            // starvation where fate ops that sort higher and hold a lock are never reserved.
+            if (txdir.compareTo(lastReserved) <= 0)
+              continue;
+
             if (defered.containsKey(tid)) {
               if (defered.get(tid) < System.currentTimeMillis())
                 defered.remove(tid);
               else
                 continue;
             }
-            if (!reserved.contains(tid))
+            if (!reserved.contains(tid)) {
               reserved.add(tid);
+              lastReserved = txdir;
+            }
             else
               continue;
           }
@@ -236,16 +249,20 @@ public class ZooStore<T> implements TStore<T> {
   public Repo<T> top(long tid) {
     verifyReserved(tid);
     
-    try {
-      String txpath = getTXPath(tid);
-      String top = findTop(txpath);
-      if (top == null)
-        return null;
-      
-      byte[] ser = zk.getData(txpath + "/" + top, null);
-      return (Repo<T>) deserialize(ser);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
+    while (true) {
+      try {
+        String txpath = getTXPath(tid);
+        String top = findTop(txpath);
+        if (top == null)
+          return null;
+        
+        byte[] ser = zk.getData(txpath + "/" + top, null);
+        return (Repo<T>) deserialize(ser);
+      } catch (KeeperException.NoNodeException ex) {
+        continue;
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
     }
   }
   
@@ -410,6 +427,7 @@ public class ZooStore<T> implements TStore<T> {
     }
   }
   
+  @Override
   public List<Long> list() {
     try {
       ArrayList<Long> l = new ArrayList<Long>();

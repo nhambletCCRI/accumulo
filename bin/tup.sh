@@ -15,9 +15,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+# Start: Resolve Script Directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+   bin="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+   SOURCE="$(readlink "$SOURCE")"
+   [[ $SOURCE != /* ]] && SOURCE="$bin/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+bin="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+# Stop: Resolve Script Directory
 
 . "$bin"/config.sh
 
@@ -26,17 +32,15 @@ SLAVES=$ACCUMULO_HOME/conf/slaves
 echo -n "Starting tablet servers ..."
 
 count=1
-for server in `grep -v '^#' "$SLAVES"`
-do 
-    echo -n "."
-    ${bin}/start-server.sh $server tserver "tablet server" &
-    count=`expr $count + 1`
-    if [ `expr $count % 72` -eq 0 ] ;
-    then
-       echo
-       wait
-    fi
+for server in `egrep -v '(^#|^\s*$)' "${SLAVES}"`; do
+   echo -n "."
+   ${bin}/start-server.sh $server tserver "tablet server" &
+   let count++
+   if [ $(( ${count} % 72 )) -eq 0 ] ;
+   then
+      echo
+      wait
+   fi
 done
 
 echo " done"
-

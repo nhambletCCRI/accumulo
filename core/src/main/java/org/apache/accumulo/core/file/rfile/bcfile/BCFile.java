@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements. See the NOTICE file distributed with this
  * work for additional information regarding copyright ownership. The ASF
@@ -159,7 +159,6 @@ public final class BCFile {
       /**
        * Current size of compressed data.
        * 
-       * @return
        * @throws IOException
        */
       long getCompressedSize() throws IOException {

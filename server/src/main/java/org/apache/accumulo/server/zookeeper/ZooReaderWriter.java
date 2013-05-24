@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -30,11 +30,13 @@ import org.apache.log4j.Logger;
 import org.apache.zookeeper.KeeperException;
 
 public class ZooReaderWriter extends org.apache.accumulo.fate.zookeeper.ZooReaderWriter {
+  private static final String SCHEME = "digest";
+  private static final String USER = "accumulo";
   private static ZooReaderWriter instance = null;
   private static IZooReaderWriter retryingInstance = null;
   
-  public ZooReaderWriter(String string, int timeInMillis, String auth) {
-    super(string, timeInMillis, auth);
+  public ZooReaderWriter(String string, int timeInMillis, String secret) {
+    super(string, timeInMillis, SCHEME, (USER + ":" + secret).getBytes());
   }
   
   public static synchronized ZooReaderWriter getInstance() {

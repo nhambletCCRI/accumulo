@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -25,10 +25,12 @@ import junit.framework.TestCase;
 
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.BatchWriter;
+import org.apache.accumulo.core.client.BatchWriterConfig;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.IteratorSetting;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.client.mock.MockInstance;
+import org.apache.accumulo.core.client.security.tokens.PasswordToken;
 import org.apache.accumulo.core.data.ByteSequence;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Mutation;
@@ -81,10 +83,10 @@ public class RowFilterTest extends TestCase {
 
   public void test1() throws Exception {
     MockInstance instance = new MockInstance("rft1");
-    Connector conn = instance.getConnector("", "".getBytes());
+    Connector conn = instance.getConnector("", new PasswordToken(""));
     
     conn.tableOperations().create("table1");
-    BatchWriter bw = conn.createBatchWriter("table1", 1000000, 60000, 1);
+    BatchWriter bw = conn.createBatchWriter("table1", new BatchWriterConfig());
     
     Mutation m = new Mutation("0");
     m.put("cf1", "cq1", "1");

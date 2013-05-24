@@ -16,10 +16,13 @@
  */
 package org.apache.accumulo.core.security;
 
+import static org.apache.accumulo.core.security.ColumnVisibility.quote;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import org.apache.accumulo.core.util.BadArgumentException;
 import org.apache.accumulo.core.util.ByteArraySet;
 import org.junit.Test;
 
@@ -28,6 +31,9 @@ public class VisibilityEvaluatorTest {
   @Test
   public void testVisibilityEvaluator() throws VisibilityParseException {
     VisibilityEvaluator ct = new VisibilityEvaluator(ByteArraySet.fromStrings("one", "two", "three", "four"));
+    
+    // test for empty vis
+    assertTrue(ct.evaluate(new ColumnVisibility(new byte[0])));
     
     // test for and
     assertTrue("'and' test", ct.evaluate(new ColumnVisibility("one&two")));
@@ -54,7 +60,7 @@ public class VisibilityEvaluatorTest {
       try {
         ct.evaluate(new ColumnVisibility(marking));
         fail(marking + " failed to throw");
-      } catch (Throwable e) {
+      } catch (BadArgumentException e) {
         // all is good
       }
     }
@@ -64,7 +70,7 @@ public class VisibilityEvaluatorTest {
       try {
         ct.evaluate(new ColumnVisibility(marking));
         fail(marking + " failed to throw");
-      } catch (Throwable e) {
+      } catch (BadArgumentException e) {
         // all is good
       }
     }
@@ -74,9 +80,47 @@ public class VisibilityEvaluatorTest {
       try {
         ct.evaluate(new ColumnVisibility(marking));
         fail(marking + " failed to throw");
-      } catch (Throwable e) {
+      } catch (BadArgumentException e) {
         // all is good
       }
     }
+  }
+  
+  @Test
+  public void testQuotedExpressions() throws VisibilityParseException {
+    VisibilityEvaluator ct = new VisibilityEvaluator(new Authorizations("A#C", "A\"C", "A\\C", "AC"));
+    
+    assertTrue(ct.evaluate(new ColumnVisibility(quote("A#C") + "|" + quote("A?C"))));
+    assertTrue(ct.evaluate(new ColumnVisibility(new ColumnVisibility(quote("A#C") + "|" + quote("A?C")).flatten())));
+    assertTrue(ct.evaluate(new ColumnVisibility(quote("A\"C") + "&" + quote("A\\C"))));
+    assertTrue(ct.evaluate(new ColumnVisibility(new ColumnVisibility(quote("A\"C") + "&" + quote("A\\C")).flatten())));
+    assertTrue(ct.evaluate(new ColumnVisibility("(" + quote("A\"C") + "|B)&(" + quote("A#C") + "|D)")));
+    
+    assertFalse(ct.evaluate(new ColumnVisibility(quote("A#C") + "&B")));
+    
+    assertTrue(ct.evaluate(new ColumnVisibility(quote("A#C"))));
+    assertTrue(ct.evaluate(new ColumnVisibility("(" + quote("A#C") + ")")));
+  }
+  
+  @Test
+  public void testQuote() {
+    assertEquals("\"A#C\"", quote("A#C"));
+    assertEquals("\"A\\\"C\"", quote("A\"C"));
+    assertEquals("\"A\\\"\\\\C\"", quote("A\"\\C"));
+    assertEquals("ACS", quote("ACS"));
+    assertEquals("\"九\"", quote("九"));
+    assertEquals("\"五十\"", quote("五十"));
+  }
+  
+  @Test
+  public void testNonAscii() throws VisibilityParseException {
+    VisibilityEvaluator ct = new VisibilityEvaluator(new Authorizations("五", "六", "八", "九", "五十"));
+    
+    assertTrue(ct.evaluate(new ColumnVisibility(quote("五") + "|" + quote("四"))));
+    assertFalse(ct.evaluate(new ColumnVisibility(quote("五") + "&" + quote("四"))));
+    assertTrue(ct.evaluate(new ColumnVisibility(quote("五") + "&(" + quote("四") + "|" + quote("九") + ")")));
+    assertTrue(ct.evaluate(new ColumnVisibility("\"五\"&(\"四\"|\"五十\")")));
+    assertFalse(ct.evaluate(new ColumnVisibility(quote("五") + "&(" + quote("四") + "|" + quote("三") + ")")));
+    assertFalse(ct.evaluate(new ColumnVisibility("\"五\"&(\"四\"|\"三\")")));
   }
 }

@@ -22,13 +22,11 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.security.SecurityPermission;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.accumulo.fate.util.UtilWaitThread;
 import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeExistsPolicy;
 import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeMissingPolicy;
 import org.apache.log4j.Logger;
-import org.apache.zookeeper.AsyncCallback.VoidCallback;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.BadVersionException;
@@ -43,7 +41,8 @@ public class ZooReaderWriter extends ZooReader implements IZooReaderWriter {
   
   private static ZooReaderWriter instance = null;
   private static IZooReaderWriter retryingInstance = null;
-  private final String auth;
+  private final String scheme;
+  private final byte[] auth;
   
   @Override
   public ZooKeeper getZooKeeper() {
@@ -51,12 +50,13 @@ public class ZooReaderWriter extends ZooReader implements IZooReaderWriter {
     if (sm != null) {
       sm.checkPermission(ZOOWRITER_PERMISSION);
     }
-    return getSession(keepers, timeout, auth);
+    return getSession(keepers, timeout, scheme, auth);
   }
   
-  public ZooReaderWriter(String string, int timeInMillis, String auth) {
+  public ZooReaderWriter(String string, int timeInMillis, String scheme, byte[] auth) {
     super(string, timeInMillis);
-    this.auth = "accumulo:" + auth;
+    this.scheme = scheme;
+    this.auth = auth;
   }
   
   @Override
@@ -143,9 +143,9 @@ public class ZooReaderWriter extends ZooReader implements IZooReaderWriter {
     } while (true);
   }
   
-  public static synchronized ZooReaderWriter getInstance(String zookeepers, int timeInMillis, String auth) {
+  public static synchronized ZooReaderWriter getInstance(String zookeepers, int timeInMillis, String scheme, byte[] auth) {
     if (instance == null)
-      instance = new ZooReaderWriter(zookeepers, timeInMillis, auth);
+      instance = new ZooReaderWriter(zookeepers, timeInMillis, scheme, auth);
     return instance;
   }
   
@@ -154,10 +154,10 @@ public class ZooReaderWriter extends ZooReader implements IZooReaderWriter {
    * 
    * @return an instance that retries when Zookeeper connection errors occur.
    */
-  public static synchronized IZooReaderWriter getRetryingInstance(String zookeepers, int timeInMillis, String auth) {
+  public static synchronized IZooReaderWriter getRetryingInstance(String zookeepers, int timeInMillis, String scheme, byte[] auth) {
     
     if (retryingInstance == null) {
-      final IZooReaderWriter inst = getInstance(zookeepers, timeInMillis, auth);
+      final IZooReaderWriter inst = getInstance(zookeepers, timeInMillis, scheme, auth);
       
       InvocationHandler ih = new InvocationHandler() {
         @Override
@@ -203,21 +203,5 @@ public class ZooReaderWriter extends ZooReader implements IZooReaderWriter {
     putPersistentData(path, new byte[] {}, NodeExistsPolicy.SKIP);
   }
 
-  @Override
-  public void sync(final String path) throws KeeperException, InterruptedException {
-    final AtomicBoolean waiter = new AtomicBoolean(false);
-    getZooKeeper().sync(path, new VoidCallback() {
-      @Override
-      public void processResult(int arg0, String arg1, Object arg2) {
-        synchronized (waiter) {
-          waiter.set(true);
-          waiter.notifyAll();
-        }
-      }}, null);
-    synchronized (waiter) {
-      if (!waiter.get())
-        waiter.wait();
-    }
-  }
-  
+
 }

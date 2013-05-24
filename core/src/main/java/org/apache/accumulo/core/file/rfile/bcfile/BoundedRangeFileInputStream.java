@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements. See the NOTICE file distributed with this
  * work for additional information regarding copyright ownership. The ASF
@@ -93,14 +93,15 @@ class BoundedRangeFileInputStream extends InputStream {
     if (n == 0)
       return -1;
     Integer ret = 0;
-    synchronized (in) {
-      in.seek(pos);
+    final FSDataInputStream inLocal = in;
+    synchronized (inLocal) {
+    	inLocal.seek(pos);
       try {
         ret = AccessController.doPrivileged(new PrivilegedExceptionAction<Integer>() {
           @Override
           public Integer run() throws IOException {
             int ret = 0;
-            ret = in.read(b, off, n);
+            ret = inLocal.read(b, off, n);
             return ret;
           }
         });

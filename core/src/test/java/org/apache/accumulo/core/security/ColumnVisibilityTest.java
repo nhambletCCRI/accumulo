@@ -16,7 +16,9 @@
  */
 package org.apache.accumulo.core.security;
 
+import static org.apache.accumulo.core.security.ColumnVisibility.quote;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import org.junit.Test;
@@ -82,6 +84,11 @@ public class ColumnVisibilityTest {
   @Test
   public void testNormalization() {
     normalized("a", "a", "(a)", "a", "b|a", "a|b", "(b)|a", "a|b", "(b|(a|c))&x", "x&(a|b|c)", "(((a)))", "a");
+    final String normForm = "a&b&c";
+    normalized("b&c&a", normForm, "c&b&a", normForm, "a&(b&c)", normForm, "(a&c)&b", normForm);
+    
+    // this an expression that's basically `expr | expr`
+    normalized("(d&c&b&a)|(b&c&a&d)", "a&b&c&d");
   }
   
   @Test
@@ -107,5 +114,35 @@ public class ColumnVisibilityTest {
   public void testMixedOperators() {
     shouldThrow("(A&B)|(C&D)&(E)");
     shouldThrow("a|b&c", "A&B&C|D", "(A&B)|(C&D)&(E)");
+  }
+  
+  @Test
+  public void testQuotes() {
+    shouldThrow("\"\"");
+    shouldThrow("\"A\"A");
+    shouldThrow("\"A\"\"B\"");
+    shouldThrow("(A)\"B\"");
+    shouldThrow("\"A\"(B)");
+    shouldThrow("\"A");
+    shouldThrow("\"");
+    shouldThrow("\"B");
+    shouldThrow("A&\"B");
+    shouldThrow("A&\"B\\'");
+    
+    shouldNotThrow("\"A\"");
+    shouldNotThrow("(\"A\")");
+    shouldNotThrow("A&\"B.D\"");
+    shouldNotThrow("A&\"B\\\\D\"");
+    shouldNotThrow("A&\"B\\\"D\"");
+  }
+  
+  @Test
+  public void testToString() {
+    ColumnVisibility cv = new ColumnVisibility(quote("a"));
+    assertEquals("[a]", cv.toString());
+    
+    // multi-byte
+    cv = new ColumnVisibility(quote("五"));
+    assertEquals("[\"五\"]", cv.toString());
   }
 }

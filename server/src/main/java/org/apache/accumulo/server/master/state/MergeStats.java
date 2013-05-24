@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -21,17 +21,17 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.accumulo.core.Constants;
+import org.apache.accumulo.server.cli.ClientOpts;
+import org.apache.accumulo.server.master.state.TabletLocationState.BadLocationStateException;
 import org.apache.accumulo.core.client.Connector;
-import org.apache.accumulo.core.client.Instance;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.KeyExtent;
+import org.apache.accumulo.core.data.PartialKey;
 import org.apache.accumulo.core.data.Range;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.zookeeper.ZooUtil;
-import org.apache.accumulo.server.client.HdfsZooInstance;
-import org.apache.accumulo.server.security.SecurityConstants;
 import org.apache.accumulo.server.zookeeper.ZooReaderWriter;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.Text;
@@ -64,6 +64,8 @@ public class MergeStats {
   }
 
   public void update(KeyExtent ke, TabletState state, boolean chopped, boolean hasWALs) {
+    if (ke.isRootTablet())
+      return;
     if (info.getState().equals(MergeState.NONE))
       return;
     if (!upperSplit && info.getRange().getEndRow().equals(ke.getPrevEndRow())) {
@@ -97,18 +99,13 @@ public class MergeStats {
     MergeState state = info.getState();
     if (state == MergeState.NONE)
       return state;
+    if (total == 0) {
+      log.trace("failed to see any tablets for this range, ignoring " + info.getRange());
+      return state;
+    }
     log.info("Computing next merge state for " + info.getRange() + " which is presently " + state + " isDelete : " + info.isDelete());
     if (state == MergeState.STARTED) {
       state = MergeState.SPLITTING;
-    }
-    if (total == 0) {
-      log.info("failed to see any tablets for this range, ignoring " + info.getRange());
-      return state;
-    }
-    if (total == 1 && info.getRange().isMeta()) {
-      // root tablet watcher trying to merge metadata tablets it won't even scan
-      log.debug("ignoring merge of " + info.getRange());
-      return state;
     }
     if (state == MergeState.SPLITTING) {
       log.info(hosted + " are hosted, total " + total);
@@ -183,31 +180,46 @@ public class MergeStats {
     Text tableId = extent.getTableId();
     Text first = KeyExtent.getMetadataEntry(tableId, start);
     Range range = new Range(first, false, null, true);
-    if (extent.isMeta())
-      range = new Range(Constants.METADATA_ROOT_TABLET_KEYSPACE);
+    if (extent.isMeta()) {
+      // don't go off the root tablet
+      range = new Range(new Key(first).followingKey(PartialKey.ROW), false, Constants.METADATA_ROOT_TABLET_KEYSPACE.getEndKey(), false);
+    }
     scanner.setRange(range);
     KeyExtent prevExtent = null;
 
+    log.debug("Scanning range " + range);
     for (Entry<Key,Value> entry : scanner) {
-      TabletLocationState tls = MetaDataTableScanner.createTabletLocationState(entry.getKey(), entry.getValue());
+      TabletLocationState tls;
+      try {
+        tls = MetaDataTableScanner.createTabletLocationState(entry.getKey(), entry.getValue());
+      } catch (BadLocationStateException e) {
+        log.error(e, e);
+        return false;
+      }
+      log.debug("consistency check: " + tls + " walogs " + tls.walogs.size());
       if (!tls.extent.getTableId().equals(tableId)) {
         break;
       }
 
       if (!tls.walogs.isEmpty() && verify.getMergeInfo().needsToBeChopped(tls.extent)) {
+        log.debug("failing consistency: needs to be chopped" + tls.extent);
         return false;
       }
 
       if (prevExtent == null) {
         // this is the first tablet observed, it must be offline and its prev row must be less than the start of the merge range
         if (tls.extent.getPrevEndRow() != null && tls.extent.getPrevEndRow().compareTo(start) > 0) {
+          log.debug("failing consistency: prev row is too high " + start);
           return false;
         }
         
-        if (tls.getState(master.onlineTabletServers()) != TabletState.UNASSIGNED)
+        if (tls.getState(master.onlineTabletServers()) != TabletState.UNASSIGNED) {
+          log.debug("failing consistency: assigned or hosted " + tls);
           return false;
+        }
         
       } else if (!tls.extent.isPreviousExtent(prevExtent)) {
+        log.debug("hole in !METADATA");
         return false;
       }
       
@@ -219,15 +231,21 @@ public class MergeStats {
         break;
       }
     }
+    log.debug("chopped " + chopped + " v.chopped " + verify.chopped + 
+        " unassigned " + unassigned + " v.unassigned " + verify.unassigned +
+        " verify.total " + verify.total);
     return chopped == verify.chopped && unassigned == verify.unassigned && unassigned == verify.total;
   }
   
   public static void main(String[] args) throws Exception {
-    Instance instance = HdfsZooInstance.getInstance();
-    Map<String,String> tableIdMap = instance.getConnector(SecurityConstants.getSystemCredentials()).tableOperations().tableIdMap();
+    ClientOpts opts = new ClientOpts();
+    opts.parseArgs(MergeStats.class.getName(), args);
+    
+    Connector conn = opts.getConnector();
+    Map<String,String> tableIdMap = conn.tableOperations().tableIdMap();
     for (String table : tableIdMap.keySet()) {
       String tableId = tableIdMap.get(table);
-      String path = ZooUtil.getRoot(instance.getInstanceID()) + Constants.ZTABLES + "/" + tableId.toString() + "/merge";
+      String path = ZooUtil.getRoot(conn.getInstance().getInstanceID()) + Constants.ZTABLES + "/" + tableId.toString() + "/merge";
       MergeInfo info = new MergeInfo();
       if (ZooReaderWriter.getInstance().exists(path)) {
         byte[] data = ZooReaderWriter.getInstance().getData(path, new Stat());

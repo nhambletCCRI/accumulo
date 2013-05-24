@@ -41,15 +41,33 @@ FUZZ=os.getpid() % 997
 ACCUMULO_HOME = os.path.dirname(__file__)
 ACCUMULO_HOME = os.path.join(ACCUMULO_HOME, *(os.path.pardir,)*3)
 ACCUMULO_HOME = os.path.realpath(ACCUMULO_HOME)
-ACCUMULO_DIR = "/user/" + os.getlogin() + "/accumulo-" + ID
+ACCUMULO_DIR = "/user/" + os.getenv('LOGNAME') + "/accumulo-" + ID
 SITE = "test-" + ID
 
-WALOG = os.path.join(ACCUMULO_HOME, 'walogs', ID)
 LOG_PROPERTIES= os.path.join(ACCUMULO_HOME, 'conf', 'log4j.properties')
 LOG_GENERIC = os.path.join(ACCUMULO_HOME, 'conf', 'generic_logger.xml')
 LOG_MONITOR = os.path.join(ACCUMULO_HOME, 'conf', 'monitor_logger.xml')
-General_CLASSPATH = ("$ACCUMULO_HOME/lib/[^.].$ACCUMULO_VERSION.jar, $ACCUMULO_HOME/lib/[^.].*.jar, $ZOOKEEPER_HOME/zookeeper[^.].*.jar,"
-"$HADOOP_HOME/conf,$HADOOP_HOME/[^.].*.jar, $HADOOP_HOME/lib/[^.].*.jar") 
+General_CLASSPATH = """
+$ACCUMULO_HOME/server/target/classes/,
+    $ACCUMULO_HOME/core/target/classes/,
+    $ACCUMULO_HOME/lib/accumulo-core.jar,
+    $ACCUMULO_HOME/start/target/classes/,
+    $ACCUMULO_HOME/lib/accumulo-start.jar,
+    $ACCUMULO_HOME/fate/target/classes/,
+    $ACCUMULO_HOME/lib/accumulo-fate.jar,
+    $ACCUMULO_HOME/examples/simple/target/classes,
+    $ACCUMULO_HOME/lib/accumulo-examples-simple.jar,
+        $ACCUMULO_HOME/lib/[^.].*.jar,
+        $ZOOKEEPER_HOME/zookeeper[^.].*.jar,
+        $HADOOP_CONF_DIR,
+        $HADOOP_PREFIX/[^.].*.jar,
+        $HADOOP_PREFIX/lib/[^.].*.jar,
+      $HADOOP_PREFIX/share/hadoop/common/.*.jar,
+      $HADOOP_PREFIX/share/hadoop/common/lib/.*.jar,
+      $HADOOP_PREFIX/share/hadoop/hdfs/.*.jar,
+      $HADOOP_PREFIX/share/hadoop/mapreduce/.*.jar,
+      $HADOOP_PREFIX/share/hadoop/yarn/.*.jar,
+"""
 
 log = logging.getLogger('test.auto')
 
@@ -97,19 +115,21 @@ class TestUtilsMixin:
     def runOn(self, host, cmd, **opts):
         cmd = map(str, cmd)
         log.debug('%s: %s', host, ' '.join(cmd))
-        if host == 'localhost':
-            os.environ['ACCUMULO_TSERVER_OPTS']='-Xmx700m -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 '
+        if host == 'localhost' or host == socket.getfqdn():
+            os.environ['ACCUMULO_TSERVER_OPTS']='-Xmx800m -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 '
             os.environ['ACCUMULO_GENERAL_OPTS']=('-Dorg.apache.accumulo.config.file=%s' % (SITE))
             os.environ['ACCUMULO_LOG_DIR']= ACCUMULO_HOME + '/logs/' + ID
+            os.environ['ACCUMULO_TEST']= "TEST"
             return Popen(cmd, stdout=PIPE, stderr=PIPE, **opts)
         else:
             cp = 'HADOOP_CLASSPATH=%s' % os.environ.get('HADOOP_CLASSPATH','')
             jo = "ACCUMULO_TSERVER_OPTS='-Xmx700m -XX:+UseConcMarkSweepGC -XX:CMSInitiatingOccupancyFraction=75 '"
             go = ("ACCUMULO_GENERAL_OPTS='-Dorg.apache.accumulo.config.file=%s'" % (SITE))
             ld = 'ACCUMULO_LOG_DIR=%s/logs/%s' % (ACCUMULO_HOME, ID)
+            os.environ['ACCUMULO_TEST']= "TEST"
             execcmd = ['ssh', '-q', host, cp, jo, go, ld] + quote(cmd)
             log.debug(repr(execcmd))
-            return Popen(execcmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, **opts)
+            return Popen(execcmd, stdout=PIPE, stderr=PIPE, **opts)
             
     def shell(self, host, input, **opts):
         """Run accumulo shell with the given input,
@@ -155,7 +175,7 @@ class TestUtilsMixin:
 
 
     def pkill(self, host, pattern, signal=signal.SIGKILL):
-        cmd = [os.path.join(ACCUMULO_HOME, 'test', 'system', 'auto', 'pkill.sh'), str(signal), str(os.getuid()), ID + '.*' + pattern]
+        cmd = [os.path.join(ACCUMULO_HOME, 'test', 'system', 'auto', 'pkill.sh'), str(signal), str(os.getuid()), pattern + '.*' + ID]
         handle = self.runOn(host, cmd)
         handle.communicate()
 
@@ -187,7 +207,7 @@ class TestUtilsMixin:
         self.cleanupAccumuloHandles(0.5)
 
     def stop_monitor(self, host):
-        self.pkill(host, 'Main monitor$', signal=signal.SIGHUP)
+        self.pkill(host, 'app=monitor', signal=signal.SIGHUP)
         # wait for it to stop
         self.sleep(0.5)
         self.cleanupAccumuloHandles(0.5)
@@ -205,27 +225,27 @@ class TestUtilsMixin:
                           **kwargs)
 
     def ingest(self, host, count, start=0, timestamp=None, size=50, colf=None, **kwargs):
-        klass = 'org.apache.accumulo.server.test.TestIngest'
+        klass = 'org.apache.accumulo.test.TestIngest'
         args = ''
         if timestamp:
-            args += "-timestamp %ld " % int(timestamp)
-        args += '-tsbw -size %d -random 56 %d %d 1 ' % (size, count, start)
+            args += "-ts %ld " % int(timestamp)
+        args += '--debug -i %s -u %s --size %d --random 56 --rows %d --start %d --cols 1 --createTable -p %s' % (INSTANCE_NAME, ROOT, size, count, start, ROOT_PASSWORD)
         if colf:
-           args = '-colf %s ' % colf + args
+           args = '--columnFamily %s ' % colf + args
         return self.runClassOn(host, klass, args.split(), **kwargs)
 
     def verify(self, host, count, start=0, size=50, timestamp=None, colf='colf'):
-        klass = 'org.apache.accumulo.server.test.VerifyIngest'
+        klass = 'org.apache.accumulo.test.VerifyIngest'
         args = ''
         if timestamp:
-            args += "-timestamp %ld " % int(timestamp)
-        args += '-size %d -random 56 -colf %s %d %d 1 ' % (size, colf, count, start)
+            args += "-ts %ld " % int(timestamp)
+        args += '-i %s -u %s --size %d --random 56 -cf %s --rows %d --start %d --cols 1 -p %s' % (INSTANCE_NAME, ROOT, size, colf, count, start, ROOT_PASSWORD)
         return self.runClassOn(host, klass, args.split())
 
     def stop_accumulo(self, signal=signal.SIGHUP):
         log.info('killing accumulo processes everywhere')
         for host in self.hosts:
-            self.pkill(host, 'org.apache.accumulo.start', signal)
+            self.pkill(host, 'accumulo.config.file', signal)
 
     def create_config_file(self, settings):
         fp = open(os.path.join(ACCUMULO_HOME, 'conf', SITE),
@@ -238,7 +258,6 @@ class TestUtilsMixin:
                           'master.port.client':  41000 + FUZZ,
                           'monitor.port.client': 50099,
                           'gc.port.client':      45000 + FUZZ,
-                          'logger.dir.walog': WALOG,
                           'general.classpaths' :General_CLASSPATH,
                           'instance.secret': 'secret',
                          })
@@ -255,10 +274,6 @@ class TestUtilsMixin:
         self.create_config_file(self.settings.copy())
 
         os.system('rm -rf %s/logs/%s/*.log' % (ACCUMULO_HOME, ID))
-        if not os.path.exists(WALOG):
-           os.mkdir(WALOG)
-        else:
-           os.system("rm -f '%s'/*" % WALOG)
 
         self.wait(self.runOn(host,
                              ['hadoop', 'fs', '-rmr', ACCUMULO_DIR]))
@@ -367,6 +382,10 @@ class TestUtilsMixin:
         if not handles:
            if handle.returncode is None:
               handle.communicate()
+	   if handle.stdout:
+	      handle.stdout.close()
+	   if handle.stderr:
+              handle.stderr.close()
            self.assert_(self.processResult(out, err, handle.returncode))
            return out, err
         self.fail("Process failed to finish in %s seconds" % secs)
@@ -380,17 +399,20 @@ class TestUtilsMixin:
         self.cleanupAccumuloHandles()
         # give everyone a couple seconds to completely stop
         for h in self.accumuloHandles:
-            self.waitForStop(h, 60)
+            self.waitForStop(h, 10)
 
     def clean_logging(self):
       LOG_PROPERTIES_BACKUP='%s.bkp' % LOG_PROPERTIES 
       LOG_GENERIC_BACKUP='%s.bkp' % LOG_GENERIC
       LOG_MONITOR_BACKUP='%s.bkp' % LOG_MONITOR
-      os.remove(LOG_PROPERTIES)
-      os.remove(LOG_GENERIC)
-      os.remove(LOG_MONITOR)
+      if os.path.exists(LOG_PROPERTIES):
+         os.remove(LOG_PROPERTIES)
+      if os.path.exists(LOG_GENERIC):
+         os.remove(LOG_GENERIC)
+      if os.path.exists(LOG_MONITOR):
+         os.remove(LOG_MONITOR)
       if os.path.exists(LOG_PROPERTIES_BACKUP):
-        os.rename(LOG_PROPERTIES_BACKUP, LOG_PROPERTIES)
+         os.rename(LOG_PROPERTIES_BACKUP, LOG_PROPERTIES)
       if os.path.exists(LOG_GENERIC_BACKUP):
          os.rename(LOG_GENERIC_BACKUP, LOG_GENERIC)
       if os.path.exists(LOG_MONITOR_BACKUP):
@@ -413,8 +435,7 @@ class TestUtilsMixin:
                                ['hadoop', 'fs', '-rmr', ACCUMULO_DIR]))
           self.wait(self.runClassOn(self.masterHost(),
                                     'org.apache.accumulo.server.util.DeleteZooInstance',
-                                    [INSTANCE_NAME]))
-          self.wait(self.runOn(self.masterHost(), ['rm', '-rf', WALOG]))
+                                    ['-i', INSTANCE_NAME]))
           self.wait(self.runOn(self.masterHost(), ['rm', '-rf', ACCUMULO_HOME + '/logs/' + ID]))
           self.clean_logging() 
           os.unlink(os.path.join(ACCUMULO_HOME, 'conf', SITE))
@@ -432,7 +453,7 @@ class TestUtilsMixin:
     def getTableId(self, table):
         if table == '!METADATA' :
             return '!0'
-        handle = self.runClassOn(self.masterHost(), 'org.apache.accumulo.server.test.ListTables',[]);
+        handle = self.runClassOn(self.masterHost(), 'org.apache.accumulo.test.ListTables',['-u', ROOT]);
         out,err = handle.communicate()
         self.assert_(handle.returncode==0)
         for line in out.split('\n') :

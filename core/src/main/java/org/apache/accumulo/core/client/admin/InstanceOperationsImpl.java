@@ -21,7 +21,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.accumulo.cloudtrace.instrument.Tracer;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
@@ -33,35 +32,43 @@ import org.apache.accumulo.core.client.impl.MasterClient;
 import org.apache.accumulo.core.client.impl.ServerClient;
 import org.apache.accumulo.core.client.impl.thrift.ClientService;
 import org.apache.accumulo.core.client.impl.thrift.ConfigurationType;
+import org.apache.accumulo.core.client.impl.thrift.ThriftSecurityException;
 import org.apache.accumulo.core.master.thrift.MasterClientService;
-import org.apache.accumulo.core.security.thrift.AuthInfo;
+import org.apache.accumulo.core.security.thrift.TCredentials;
 import org.apache.accumulo.core.tabletserver.thrift.TabletClientService;
 import org.apache.accumulo.core.tabletserver.thrift.TabletClientService.Client;
+import org.apache.accumulo.core.util.AddressUtil;
 import org.apache.accumulo.core.util.ArgumentChecker;
 import org.apache.accumulo.core.util.ThriftUtil;
 import org.apache.accumulo.core.zookeeper.ZooUtil;
 import org.apache.accumulo.fate.zookeeper.ZooCache;
+import org.apache.accumulo.trace.instrument.Tracer;
+import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 
 /**
  * Provides a class for administering the accumulo instance
  */
 public class InstanceOperationsImpl implements InstanceOperations {
   private Instance instance;
-  private AuthInfo credentials;
+  private TCredentials credentials;
   
   /**
    * @param instance
    *          the connection information for this instance
    * @param credentials
-   *          the username/password for this connection
+   *          the Credential, containing principal and Authentication Token
    */
-  public InstanceOperationsImpl(Instance instance, AuthInfo credentials) {
+  public InstanceOperationsImpl(Instance instance, TCredentials credentials) {
     ArgumentChecker.notNull(instance, credentials);
     this.instance = instance;
     this.credentials = credentials;
   }
   
-  /* (non-Javadoc)
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.core.client.admin.InstanceOperations#setProperty(java.lang.String, java.lang.String)
    */
   @Override
@@ -75,7 +82,9 @@ public class InstanceOperationsImpl implements InstanceOperations {
     });
   }
   
-  /* (non-Javadoc)
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.core.client.admin.InstanceOperations#removeProperty(java.lang.String)
    */
   @Override
@@ -89,7 +98,9 @@ public class InstanceOperationsImpl implements InstanceOperations {
     });
   }
   
-  /* (non-Javadoc)
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.core.client.admin.InstanceOperations#getSystemConfiguration()
    */
   @Override
@@ -97,12 +108,14 @@ public class InstanceOperationsImpl implements InstanceOperations {
     return ServerClient.execute(instance, new ClientExecReturn<Map<String,String>,ClientService.Client>() {
       @Override
       public Map<String,String> execute(ClientService.Client client) throws Exception {
-        return client.getConfiguration(ConfigurationType.CURRENT);
+        return client.getConfiguration(Tracer.traceInfo(), credentials, ConfigurationType.CURRENT);
       }
     });
   }
   
-  /* (non-Javadoc)
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.core.client.admin.InstanceOperations#getSiteConfiguration()
    */
   @Override
@@ -110,12 +123,14 @@ public class InstanceOperationsImpl implements InstanceOperations {
     return ServerClient.execute(instance, new ClientExecReturn<Map<String,String>,ClientService.Client>() {
       @Override
       public Map<String,String> execute(ClientService.Client client) throws Exception {
-        return client.getConfiguration(ConfigurationType.SITE);
+        return client.getConfiguration(Tracer.traceInfo(), credentials, ConfigurationType.SITE);
       }
     });
   }
   
-  /* (non-Javadoc)
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.core.client.admin.InstanceOperations#getTabletServers()
    */
   
@@ -138,31 +153,42 @@ public class InstanceOperationsImpl implements InstanceOperations {
     return results;
   }
   
-  /* (non-Javadoc)
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.core.client.admin.InstanceOperations#getActiveScans(java.lang.String)
    */
   
   @Override
   public List<ActiveScan> getActiveScans(String tserver) throws AccumuloException, AccumuloSecurityException {
-    List<org.apache.accumulo.core.tabletserver.thrift.ActiveScan> tas = ThriftUtil.execute(tserver, instance.getConfiguration(),
-        new ClientExecReturn<List<org.apache.accumulo.core.tabletserver.thrift.ActiveScan>,TabletClientService.Client>() {
-          @Override
-          public List<org.apache.accumulo.core.tabletserver.thrift.ActiveScan> execute(TabletClientService.Client client) throws Exception {
-            return client.getActiveScans(Tracer.traceInfo(), credentials);
-          }
-        });
-    List<ActiveScan> as = new ArrayList<ActiveScan>();
-    for (org.apache.accumulo.core.tabletserver.thrift.ActiveScan activeScan : tas) {
-      try {
-        as.add(new ActiveScan(instance, activeScan));
-      } catch (TableNotFoundException e) {
-        throw new AccumuloException(e);
+    Client client = null;
+    try {
+      client = ThriftUtil.getTServerClient(tserver, instance.getConfiguration());
+      
+      List<ActiveScan> as = new ArrayList<ActiveScan>();
+      for (org.apache.accumulo.core.tabletserver.thrift.ActiveScan activeScan : client.getActiveScans(Tracer.traceInfo(), credentials)) {
+        try {
+          as.add(new ActiveScan(instance, activeScan));
+        } catch (TableNotFoundException e) {
+          throw new AccumuloException(e);
+        }
       }
+      return as;
+    } catch (TTransportException e) {
+      throw new AccumuloException(e);
+    } catch (ThriftSecurityException e) {
+      throw new AccumuloSecurityException(e.user, e.code, e);
+    } catch (TException e) {
+      throw new AccumuloException(e);
+    } finally {
+      if (client != null)
+        ThriftUtil.returnClient(client);
     }
-    return as;
   }
   
-  /* (non-Javadoc)
+  /*
+   * (non-Javadoc)
+   * 
    * @see org.apache.accumulo.core.client.admin.InstanceOperations#testClassLoad(java.lang.String, java.lang.String)
    */
   @Override
@@ -170,8 +196,61 @@ public class InstanceOperationsImpl implements InstanceOperations {
     return ServerClient.execute(instance, new ClientExecReturn<Boolean,ClientService.Client>() {
       @Override
       public Boolean execute(ClientService.Client client) throws Exception {
-        return client.checkClass(Tracer.traceInfo(), className, asTypeName);
+        return client.checkClass(Tracer.traceInfo(), credentials, className, asTypeName);
       }
     });
+  }
+  
+  /*
+   * (non-Javadoc)
+   * 
+   * @see org.apache.accumulo.core.client.admin.InstanceOperations#getActiveCompactions(java.lang.String)
+   */
+  @Override
+  public List<ActiveCompaction> getActiveCompactions(String tserver) throws AccumuloException, AccumuloSecurityException {
+    Client client = null;
+    try {
+      client = ThriftUtil.getTServerClient(tserver, instance.getConfiguration());
+      
+      List<ActiveCompaction> as = new ArrayList<ActiveCompaction>();
+      for (org.apache.accumulo.core.tabletserver.thrift.ActiveCompaction activeCompaction : client.getActiveCompactions(Tracer.traceInfo(), credentials)) {
+        as.add(new ActiveCompaction(instance, activeCompaction));
+      }
+      return as;
+    } catch (TTransportException e) {
+      throw new AccumuloException(e);
+    } catch (ThriftSecurityException e) {
+      throw new AccumuloSecurityException(e.user, e.code, e);
+    } catch (TException e) {
+      throw new AccumuloException(e);
+    } finally {
+      if (client != null)
+        ThriftUtil.returnClient(client);
+    }
+  }
+  
+  /*
+   * (non-Javadoc)
+   * 
+   * @see org.apache.accumulo.core.client.admin.InstanceOperations#ping(java.lang.String)
+   */
+  @Override
+  public void ping(String tserver) throws AccumuloException {
+    TTransport transport = null;
+    try {
+      transport = ThriftUtil.createTransport(AddressUtil.parseAddress(tserver), instance.getConfiguration());
+      TabletClientService.Client client = ThriftUtil.createClient(new TabletClientService.Client.Factory(), transport);
+      client.getTabletServerStatus(Tracer.traceInfo(), credentials);
+    } catch (TTransportException e) {
+      throw new AccumuloException(e);
+    } catch (ThriftSecurityException e) {
+      throw new AccumuloException(e);
+    } catch (TException e) {
+      throw new AccumuloException(e);
+    } finally {
+      if (transport != null) {
+        transport.close();
+      }
+    }
   }
 }

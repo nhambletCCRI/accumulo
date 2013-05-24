@@ -16,6 +16,7 @@
  */
 package org.apache.accumulo.core.file.rfile.bcfile;
 
+import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -29,28 +30,36 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 public class PrintInfo {
-  public static void printMetaBlockInfo(Configuration conf, FileSystem fs, Path path) throws Exception {
+  public static void printMetaBlockInfo(Configuration conf, FileSystem fs, Path path) throws IOException {
     FSDataInputStream fsin = fs.open(path);
-    BCFile.Reader bcfr = new BCFile.Reader(fsin, fs.getFileStatus(path).getLen(), conf);
-    
-    Set<Entry<String,MetaIndexEntry>> es = bcfr.metaIndex.index.entrySet();
-    
-    for (Entry<String,MetaIndexEntry> entry : es) {
-      PrintStream out = System.out;
-      out.println("Meta block     : " + entry.getKey());
-      out.println("      Raw size             : " + String.format("%,d", entry.getValue().getRegion().getRawSize()) + " bytes");
-      out.println("      Compressed size      : " + String.format("%,d", entry.getValue().getRegion().getCompressedSize()) + " bytes");
-      out.println("      Compression type     : " + entry.getValue().getCompressionAlgorithm().getName());
-      out.println();
+    BCFile.Reader bcfr = null;
+    try {
+      bcfr = new BCFile.Reader(fsin, fs.getFileStatus(path).getLen(), conf);
+      
+      Set<Entry<String,MetaIndexEntry>> es = bcfr.metaIndex.index.entrySet();
+      
+      for (Entry<String,MetaIndexEntry> entry : es) {
+        PrintStream out = System.out;
+        out.println("Meta block     : " + entry.getKey());
+        out.println("      Raw size             : " + String.format("%,d", entry.getValue().getRegion().getRawSize()) + " bytes");
+        out.println("      Compressed size      : " + String.format("%,d", entry.getValue().getRegion().getCompressedSize()) + " bytes");
+        out.println("      Compression type     : " + entry.getValue().getCompressionAlgorithm().getName());
+        out.println();
+      }
+    } finally {
+      if (bcfr != null) {
+        bcfr.close();
+      }
     }
   }
   
   public static void main(String[] args) throws Exception {
     Configuration conf = new Configuration();
     @SuppressWarnings("deprecation")
-    // Not for client use
-    FileSystem fs = FileUtil.getFileSystem(conf, AccumuloConfiguration.getSiteConfiguration());
+    FileSystem hadoopFs = FileUtil.getFileSystem(conf, AccumuloConfiguration.getSiteConfiguration());
+    FileSystem localFs = FileSystem.getLocal(conf);
     Path path = new Path(args[0]);
+    FileSystem fs = hadoopFs.exists(path) ? hadoopFs : localFs; // fall back to local
     printMetaBlockInfo(conf, fs, path);
   }
 }

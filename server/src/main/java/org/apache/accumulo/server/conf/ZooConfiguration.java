@@ -42,7 +42,7 @@ public class ZooConfiguration extends AccumuloConfiguration {
   private static ZooConfiguration instance = null;
   private static String instanceId = null;
   private static ZooCache propCache = null;
-  private Map<String,String> fixedProps = Collections.synchronizedMap(new HashMap<String,String>());
+  private final Map<String,String> fixedProps = Collections.synchronizedMap(new HashMap<String,String>());
   
   private ZooConfiguration(AccumuloConfiguration parent) {
     this.parent = parent;
@@ -57,14 +57,20 @@ public class ZooConfiguration extends AccumuloConfiguration {
     return instance;
   }
   
-  @SuppressWarnings("deprecation")
   synchronized public static ZooConfiguration getInstance(AccumuloConfiguration parent) {
     if (instance == null) {
       propCache = new ZooCache(parent.get(Property.INSTANCE_ZK_HOST), (int) parent.getTimeInMillis(Property.INSTANCE_ZK_TIMEOUT));
       instance = new ZooConfiguration(parent);
-      instanceId = ZooKeeperInstance.getInstanceIDFromHdfs(ServerConstants.getInstanceIdLocation());
+      @SuppressWarnings("deprecation")
+      String deprecatedInstanceIdFromHdfs = ZooKeeperInstance.getInstanceIDFromHdfs(ServerConstants.getInstanceIdLocation());
+      instanceId = deprecatedInstanceIdFromHdfs;
     }
     return instance;
+  }
+  
+  public void invalidateCache() {
+    if (propCache != null)
+      propCache.clear();
   }
   
   private String _get(Property property) {
@@ -87,6 +93,7 @@ public class ZooConfiguration extends AccumuloConfiguration {
     return value;
   }
   
+  @Override
   public String get(Property property) {
     if (Property.isFixedZooPropertyKey(property)) {
       if (fixedProps.containsKey(property.getKey())) {
