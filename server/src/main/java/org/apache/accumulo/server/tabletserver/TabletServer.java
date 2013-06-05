@@ -139,6 +139,7 @@ import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.accumulo.server.conf.TableConfiguration;
 import org.apache.accumulo.server.data.ServerMutation;
+import org.apache.accumulo.server.fs.FileRef;
 import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.accumulo.server.fs.FileSystemImpl;
 import org.apache.accumulo.server.master.state.Assignment;
@@ -878,6 +879,11 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
       for (Entry<TKeyExtent,Map<String,MapFileInfo>> entry : files.entrySet()) {
         TKeyExtent tke = entry.getKey();
         Map<String,MapFileInfo> fileMap = entry.getValue();
+        Map<FileRef, MapFileInfo> fileRefMap = new HashMap<FileRef, MapFileInfo>();
+        for (Entry<String,MapFileInfo> mapping : fileMap.entrySet()) {
+          org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(mapping.getKey());
+          fileRefMap.put(new FileRef(mapping.getKey(), ns.makeQualified(new Path(mapping.getKey()))), mapping.getValue());
+        }
         
         Tablet importTablet = onlineTablets.get(new KeyExtent(tke));
         
@@ -885,7 +891,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
           failures.add(tke);
         } else {
           try {
-            importTablet.importMapFiles(tid, fileMap, setTime);
+            importTablet.importMapFiles(tid, fileRefMap, setTime);
           } catch (IOException ioe) {
             log.info("files " + fileMap.keySet() + " not imported to " + new KeyExtent(tke) + ": " + ioe.getMessage());
             failures.add(tke);
@@ -2913,7 +2919,13 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
       SortedMap<Text,SortedMap<ColumnFQ,Value>> tabletEntries;
       tabletEntries = MetadataTable.getTabletEntries(tabletsKeyValues, columnsToFetch);
       
-      KeyExtent fke = MetadataTable.fixSplit(metadataEntry, tabletEntries.get(metadataEntry), instance, SecurityConstants.getSystemCredentials(), lock);
+      KeyExtent fke;
+      try {
+        fke = MetadataTable.fixSplit(metadataEntry, tabletEntries.get(metadataEntry), instance, SecurityConstants.getSystemCredentials(), lock);
+      } catch (IOException e) {
+        log.error("Error fixing split " + metadataEntry);
+        throw new AccumuloException(e.toString());
+      }
       
       if (!fke.equals(extent)) {
         return new Pair<Text,KeyExtent>(null, fke);
@@ -3243,7 +3255,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
       String recovery = null;
       for (String log : entry.logSet) {
         String[] parts = log.split("/"); // "host:port/filename"
-        log = ServerConstants.getRecoveryDir() + "/" + parts[1];
+        log = fs.getFullPath(ServerConstants.getRecoveryDirs(), parts[1]);
         Path finished = new Path(log + "/finished");
         TabletServer.log.info("Looking for " + finished);
         if (fs.exists(finished)) {

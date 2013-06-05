@@ -35,8 +35,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 
-import org.apache.accumulo.trace.instrument.TraceExecutorService;
-import org.apache.accumulo.trace.instrument.Tracer;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.Instance;
@@ -63,6 +61,7 @@ import org.apache.accumulo.fate.Repo;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
+import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.accumulo.server.master.LiveTServerSet.TServerConnection;
 import org.apache.accumulo.server.master.Master;
 import org.apache.accumulo.server.master.state.TServerInstance;
@@ -71,10 +70,11 @@ import org.apache.accumulo.server.tabletserver.UniqueNameAllocator;
 import org.apache.accumulo.server.util.MetadataTable;
 import org.apache.accumulo.server.zookeeper.DistributedWorkQueue;
 import org.apache.accumulo.server.zookeeper.TransactionWatcher.ZooArbitrator;
+import org.apache.accumulo.trace.instrument.TraceExecutorService;
+import org.apache.accumulo.trace.instrument.Tracer;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.MapFile;
 import org.apache.hadoop.io.Text;
@@ -180,7 +180,22 @@ public class BulkImport extends MasterRepo {
   }
   
   private Path createNewBulkDir(FileSystem fs, String tableId) throws IOException {
-    Path directory = new Path(ServerConstants.getTablesDir() + "/" + tableId);
+    String tableDir = null;
+    loop:
+    for (String dir : fs.getFileSystems().keySet()) {
+      if (this.sourceDir.startsWith(dir)) {
+        for (String path : ServerConstants.getTablesDirs()) {
+          if (path.startsWith(dir)) {
+            tableDir = path;
+            break loop;
+          }
+        }
+        break;
+      }
+    }
+    if (tableDir == null)
+      throw new IllegalStateException(sourceDir + " is not in a known namespace");
+    Path directory = new Path(tableDir + "/" + tableId);
     fs.mkdirs(directory);
     
     // only one should be able to create the lock file

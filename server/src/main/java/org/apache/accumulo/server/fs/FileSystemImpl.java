@@ -4,7 +4,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -20,6 +20,7 @@ import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -186,7 +187,7 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
   }
 
   private void ensureSyncIsEnabled() {
-    for (FileSystem fs : getFileSystems()) {
+    for (FileSystem fs : getFileSystems().values()) {
       if (fs instanceof DistributedFileSystem) {
         if (!fs.getConf().getBoolean("dfs.durable.sync", false) && !fs.getConf().getBoolean("dfs.support.append", false)) {
           String msg = "Must set dfs.durable.sync OR dfs.support.append to true.  Which one needs to be set depends on your version of HDFS.  See ACCUMULO-623. \n"
@@ -230,7 +231,15 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
 
   @Override
   public FileSystem getFileSystemByPath(Path path) {
-    log.info("Looking up namespace on " + path);
+    if (path.isAbsolute())
+    {
+      try {
+        return path.getFileSystem(CachedConfiguration.getInstance());
+      } catch (IOException ex) {
+        throw new RuntimeException(ex);
+      }
+    }
+      
     return namespaces.get(defaultNamespace);
   }
 
@@ -240,8 +249,8 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
   }
 
   @Override
-  public Collection<FileSystem> getFileSystems() {
-    return new ArrayList<FileSystem>(namespaces.values());
+  public Map<String, ? extends org.apache.hadoop.fs.FileSystem>  getFileSystems() {
+    return namespaces;
   }
 
   @Override
@@ -293,7 +302,7 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
 
   @Override
   public boolean isReady() throws IOException {
-    for (FileSystem fs : getFileSystems()) {
+    for (FileSystem fs : getFileSystems().values()) {
       if (!(fs instanceof DistributedFileSystem))
         continue;
       DistributedFileSystem dfs = (DistributedFileSystem)fs;
@@ -341,11 +350,14 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
   public FileStatus[] globStatus(Path pathPattern) throws IOException {
     return getFileSystemByPath(pathPattern).globStatus(pathPattern);
   }
-
+  
   @Override
   public String getFullPath(Key key) {
     
     String relPath = key.getColumnQualifierData().toString();
+    if (relPath.contains(":"))
+      return relPath;
+   
     byte [] tableId = KeyExtent.tableOfMetadataRow(key.getRow());
     
     if (relPath.startsWith("../"))
@@ -354,7 +366,52 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
       relPath = "/" + new String(tableId) + relPath;
     String fullPath = Constants.getTablesDir(conf) + relPath;
     FileSystem ns = getFileSystemByPath(fullPath);
-    return ns.makeQualified(new Path(fullPath)).toString();
+    String result = ns.makeQualified(new Path(fullPath)).toString();
+    return result;
+  }
+
+  @Override
+  public Path matchingFileSystem(Path source, String[] options) {
+    for (String fs : getFileSystems().keySet()) {
+      for (String option : options) {
+        if (option.startsWith(fs))
+          return new Path(option);
+      }
+    }
+    return null;
+  }
+
+  @Override
+  public String newPathOnSameNamespace(String sourceDir, String suffix) {
+    for (String fs : getFileSystems().keySet()) {
+        if (sourceDir.startsWith(fs)) {
+          return fs + "/" + suffix;
+        }
+    }
+    return null;
+  }
+
+  @Override
+  public String getFullPath(String[] paths, String fileName) throws IOException {
+    if (fileName.contains(":"))
+      return fileName;
+    // old-style name, on one of many possible "root" paths:
+    if (fileName.startsWith("../"))
+      fileName = fileName.substring(2);
+    for (String path : paths) {
+      String fullPath = path + fileName;
+      FileSystem ns = getFileSystemByPath(fullPath);
+      Path exists = new Path(fullPath);
+      if (ns.exists(exists))
+        return ns.makeQualified(exists).toString();
+    }
+    throw new RuntimeException("Could not find file " + fileName + " in " + Arrays.asList(paths));
+  }
+
+  @Override
+  public ContentSummary getContentSummary(String dir) {
+    // TODO Auto-generated method stub
+    return null;
   }
 
 }

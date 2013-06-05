@@ -96,6 +96,7 @@ import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeMissingPolicy;
 import org.apache.accumulo.server.Accumulo;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
+import org.apache.accumulo.server.fs.FileRef;
 import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.accumulo.server.fs.FileSystemImpl;
 import org.apache.accumulo.server.master.LiveTServerSet.TServerConnection;
@@ -1571,11 +1572,11 @@ public class Master implements LiveTServerSet.Listener, TableObserver, CurrentSt
         Constants.METADATA_TIME_COLUMN.fetch(scanner);
         scanner.fetchColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY);
         scanner.fetchColumnFamily(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY);
-        Set<String> datafiles = new TreeSet<String>();
+        Set<FileRef> datafiles = new TreeSet<FileRef>();
         for (Entry<Key,Value> entry : scanner) {
           Key key = entry.getKey();
           if (key.compareColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY) == 0) {
-            datafiles.add(key.getColumnQualifier().toString());
+            datafiles.add(new FileRef(fs, key));
             if (datafiles.size() > 1000) {
               MetadataTable.addDeleteEntries(range, datafiles, SecurityConstants.getSystemCredentials());
               datafiles.clear();
@@ -1585,7 +1586,7 @@ public class Master implements LiveTServerSet.Listener, TableObserver, CurrentSt
           } else if (key.compareColumnFamily(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY) == 0) {
             throw new IllegalStateException("Tablet " + key.getRow() + " is assigned during a merge!");
           } else if (Constants.METADATA_DIRECTORY_COLUMN.hasColumns(key)) {
-            datafiles.add(entry.getValue().toString());
+            datafiles.add(new FileRef(fs, key));
             if (datafiles.size() > 1000) {
               MetadataTable.addDeleteEntries(range, datafiles, SecurityConstants.getSystemCredentials());
               datafiles.clear();

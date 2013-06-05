@@ -17,12 +17,14 @@
 package org.apache.accumulo.server.util;
 
 import java.io.IOException;
+import java.util.Random;
 
 import org.apache.accumulo.core.Constants;
-import org.apache.accumulo.core.util.CachedConfiguration;
 import org.apache.accumulo.core.util.UtilWaitThread;
+import org.apache.accumulo.server.ServerConstants;
+import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystemImpl;
 import org.apache.accumulo.server.tabletserver.UniqueNameAllocator;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
@@ -31,32 +33,37 @@ public class TabletOperations {
   
   private static final Logger log = Logger.getLogger(TabletOperations.class);
   
-  public static String createTabletDirectory(FileSystem fs, String tableDir, Text endRow) {
+  private static final Random random = new Random();
+  
+  // TODO ACCUMULO-118 make the namespace selection pluggable
+  public static String createTabletDirectory(FileSystem fs, String tableId, Text endRow) {
     String lowDirectory;
     
     UniqueNameAllocator namer = UniqueNameAllocator.getInstance();
+    String[] tablesDirs = ServerConstants.getTablesDirs();
+    String randomNamespace = tablesDirs[random.nextInt(tablesDirs.length)];
     
     while (true) {
       try {
         if (endRow == null) {
           lowDirectory = Constants.DEFAULT_TABLET_LOCATION;
-          Path lowDirectoryPath = new Path(tableDir + lowDirectory);
+          Path lowDirectoryPath = new Path(randomNamespace + "/" + tableId + "/" + lowDirectory);
           if (fs.exists(lowDirectoryPath) || fs.mkdirs(lowDirectoryPath))
-            return lowDirectory;
+            return lowDirectoryPath.makeQualified(fs.getFileSystemByPath(lowDirectoryPath)).toString();
           log.warn("Failed to create " + lowDirectoryPath + " for unknown reason");
         } else {
           lowDirectory = "/" + Constants.GENERATED_TABLET_DIRECTORY_PREFIX + namer.getNextName();
-          Path lowDirectoryPath = new Path(tableDir + lowDirectory);
+          Path lowDirectoryPath = new Path(randomNamespace + "/" + tableId + "/" +  lowDirectory);
           if (fs.exists(lowDirectoryPath))
             throw new IllegalStateException("Dir exist when it should not " + lowDirectoryPath);
           if (fs.mkdirs(lowDirectoryPath))
-            return lowDirectory;
+            return lowDirectoryPath.makeQualified(fs.getFileSystemByPath(lowDirectoryPath)).toString();
         }
       } catch (IOException e) {
         log.warn(e);
       }
       
-      log.warn("Failed to create dir for tablet in table " + tableDir + " will retry ...");
+      log.warn("Failed to create dir for tablet in table " + tableId + " in namespace " + randomNamespace + " + will retry ...");
       UtilWaitThread.sleep(3000);
       
     }
@@ -65,7 +72,7 @@ public class TabletOperations {
   public static String createTabletDirectory(String tableDir, Text endRow) {
     while (true) {
       try {
-        FileSystem fs = FileSystem.get(CachedConfiguration.getInstance());
+        FileSystem fs = FileSystemImpl.get();
         return createTabletDirectory(fs, tableDir, endRow);
       } catch (IOException e) {
         log.warn(e);

@@ -380,11 +380,12 @@ class CreateImportDir extends MasterRepo {
   }
   
   @Override
-  public Repo<Master> call(long tid, Master environment) throws Exception {
+  public Repo<Master> call(long tid, Master master) throws Exception {
     
     UniqueNameAllocator namer = UniqueNameAllocator.getInstance();
     
-    Path directory = new Path(ServerConstants.getTablesDir() + "/" + tableInfo.tableId);
+    Path base = master.getFileSystem().matchingFileSystem(new Path(tableInfo.exportDir), ServerConstants.getTablesDirs());
+    Path directory = new Path(base, tableInfo.tableId);
     
     Path newBulkDir = new Path(directory, Constants.BULK_PREFIX + namer.getNextName());
     

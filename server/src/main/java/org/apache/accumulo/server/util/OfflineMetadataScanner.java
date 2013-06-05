@@ -45,15 +45,15 @@ import org.apache.accumulo.core.iterators.system.DeletingIterator;
 import org.apache.accumulo.core.iterators.system.MultiIterator;
 import org.apache.accumulo.core.iterators.system.VisibilityFilter;
 import org.apache.accumulo.core.iterators.user.VersioningIterator;
-import org.apache.accumulo.core.util.CachedConfiguration;
 import org.apache.accumulo.core.util.LocalityGroupUtil;
 import org.apache.accumulo.core.util.TextUtil;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
+import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystemImpl;
 import org.apache.accumulo.server.util.MetadataTable.LogEntry;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 public class OfflineMetadataScanner extends ScannerOptions implements Scanner {
@@ -66,7 +66,8 @@ public class OfflineMetadataScanner extends ScannerOptions implements Scanner {
   private List<SortedKeyValueIterator<Key,Value>> openMapFiles(Collection<String> files, FileSystem fs, AccumuloConfiguration conf) throws IOException {
     List<SortedKeyValueIterator<Key,Value>> readers = new ArrayList<SortedKeyValueIterator<Key,Value>>();
     for (String file : files) {
-      FileSKVIterator reader = FileOperations.getInstance().openReader(file, true, fs, fs.getConf(), conf);
+      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(file);
+      FileSKVIterator reader = FileOperations.getInstance().openReader(file, true, ns, ns.getConf(), conf);
       readers.add(reader);
     }
     return readers;
@@ -150,7 +151,7 @@ public class OfflineMetadataScanner extends ScannerOptions implements Scanner {
     
     while (ssi.hasTop()) {
       if (ssi.getTopKey().compareColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY) == 0) {
-        allFiles.add(ServerConstants.getMetadataTableDir() + "/" + ssi.getTopKey().getColumnQualifier().toString());
+        allFiles.add(fs.getFullPath(ssi.getTopKey()));
       } else {
         walogs++;
       }
@@ -255,8 +256,8 @@ public class OfflineMetadataScanner extends ScannerOptions implements Scanner {
   }
   
   public static void main(String[] args) throws IOException {
-    FileSystem fs = FileSystem.get(CachedConfiguration.getInstance());
     ServerConfiguration conf = new ServerConfiguration(HdfsZooInstance.getInstance());
+    FileSystem fs = FileSystemImpl.get();
     OfflineMetadataScanner scanner = new OfflineMetadataScanner(conf.getConfiguration(), fs);
     scanner.setRange(Constants.METADATA_KEYSPACE);
     for (Entry<Key,Value> entry : scanner)

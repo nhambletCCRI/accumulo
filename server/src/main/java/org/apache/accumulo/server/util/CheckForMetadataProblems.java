@@ -24,7 +24,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.apache.accumulo.core.Constants;
-import org.apache.accumulo.server.cli.ClientOpts;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.client.impl.Writer;
@@ -34,9 +33,10 @@ import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.security.CredentialHelper;
 import org.apache.accumulo.core.tabletserver.thrift.ConstraintViolationException;
-import org.apache.accumulo.core.util.CachedConfiguration;
+import org.apache.accumulo.server.cli.ClientOpts;
 import org.apache.accumulo.server.conf.ServerConfiguration;
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystemImpl;
 import org.apache.hadoop.io.Text;
 
 import com.beust.jcommander.Parameter;
@@ -192,7 +192,7 @@ public class CheckForMetadataProblems {
     Opts opts = new Opts();
     opts.parseArgs(CheckForMetadataProblems.class.getName(), args);
     
-    FileSystem fs = FileSystem.get(CachedConfiguration.getInstance());
+    FileSystem fs = FileSystemImpl.get();
     checkMetadataTableEntries(opts, fs);
     opts.stopTracing();
     if (sawProblems)

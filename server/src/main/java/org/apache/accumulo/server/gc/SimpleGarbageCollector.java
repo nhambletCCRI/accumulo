@@ -358,21 +358,22 @@ public class SimpleGarbageCollector implements Iface {
       // if dir exist and is empty, then empty list is returned...
       // hadoop 1.0 will return null if the file doesn't exist
       // hadoop 2.0 will throw an exception if the file does not exist
-      FileStatus[] tabletDirs = null;
-      try {
-        tabletDirs = fs.listStatus(new Path(ServerConstants.getTablesDir() + "/" + delTableId));
-      } catch (FileNotFoundException ex) {
-        // ignored 
-      }
-      
-      if (tabletDirs == null)
-        continue;
-      
-      if (tabletDirs.length == 0) {
-        Path p = new Path(ServerConstants.getTablesDir() + "/" + delTableId);
-        if (!moveToTrash(p)) 
-          fs.delete(p);
-      }
+      for (String dir : ServerConstants.getTablesDirs()) {
+        FileStatus[] tabletDirs = null;
+        try {
+          tabletDirs = fs.listStatus(new Path(dir + "/" + delTableId));
+        } catch (FileNotFoundException ex) {
+          // ignored 
+        }
+        if (tabletDirs == null)
+          continue;
+        
+        if (tabletDirs.length == 0) {
+          Path p = new Path(dir + "/" + delTableId);
+          if (!moveToTrash(p)) 
+            fs.delete(p);
+        }
+      } 
     }
   }
   
@@ -430,10 +431,12 @@ public class SimpleGarbageCollector implements Iface {
       checkForBulkProcessingFiles = true;
       try {
         for (String validExtension : FileOperations.getValidExtensions()) {
-          for (FileStatus stat : fs.globStatus(new Path(ServerConstants.getTablesDir() + "/*/*/*." + validExtension))) {
-            String cand = stat.getPath().toUri().getPath();
-            if (!cand.contains(ServerConstants.getRootTabletDir())) {
-              candidates.add(cand.substring(ServerConstants.getTablesDir().length()));
+          for (String dir : ServerConstants.getTablesDirs()) {
+            for (FileStatus stat : fs.globStatus(new Path(dir + "/*/*/*." + validExtension))) {
+              String cand = stat.getPath().toUri().getPath();
+              if (cand.contains(ServerConstants.getRootTabletDir()))
+                continue;
+              candidates.add(cand.substring(dir.length()));
               log.debug("Offline candidate: " + cand);
             }
           }
@@ -658,9 +661,9 @@ public class SimpleGarbageCollector implements Iface {
         public void run() {
           boolean removeFlag;
           
-          String fullPath = ServerConstants.getTablesDir() + delete;
-          log.debug("Deleting " + fullPath);
           try {
+            String fullPath = fs.getFullPath(ServerConstants.getTablesDirs(), delete);
+            log.debug("Deleting " + fullPath);
             
             Path p = new Path(fullPath);
             

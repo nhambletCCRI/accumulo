@@ -24,32 +24,49 @@ import static org.apache.accumulo.core.Constants.*;
 
 public class ServerConstants {
   // these are functions to delay loading the Accumulo configuration unless we must
-  public static String getBaseDir() {
-    return ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_DIR);
+  public static String[] getBaseDirs() {
+    String singleNamespace = ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_DIR);
+    String ns = ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_NAMESPACES);
+    if (ns == null) {
+      return new String[] { singleNamespace };
+    }
+    String namespaces[] = ns.split(",");
+    if (namespaces.length < 2) {
+      return new String[] { singleNamespace };
+    }
+    return prefix(namespaces, singleNamespace);
   }
   
-  public static String getTablesDir() {
-    return getBaseDir() + "/tables";
+  public static String[] prefix(String bases[], String suffix) {
+    String result[] = new String[bases.length];
+    for (int i = 0; i < bases.length; i++) {
+      result[i] = bases[i] + "/" + suffix;
+    }
+    return result;
   }
   
-  public static String getRecoveryDir() {
-    return getBaseDir() + "/recovery";
+  public static String[] getTablesDirs() {
+    return prefix(getBaseDirs(), "tables");
+  }
+  
+  public static String[] getRecoveryDirs() {
+    return prefix(getBaseDirs(), "recovery");
   }
   
   public static Path getInstanceIdLocation() {
-    return new Path(getBaseDir() + "/instance_id");
+    return new Path(ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_DIR) + "/instance_id");
   }
   
   public static Path getDataVersionLocation() {
-    return new Path(getBaseDir() + "/version");
+    return new Path(ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_DIR) + "/version");
   }
   
-  public static String getMetadataTableDir() {
-    return getTablesDir() + "/" + METADATA_TABLE_ID;
+  public static String[] getMetadataTableDirs() {
+    return prefix(getTablesDirs(), METADATA_TABLE_ID);
   }
   
   public static String getRootTabletDir() {
-    return getMetadataTableDir() + ZROOT_TABLET;
+    return prefix(getMetadataTableDirs(), ZROOT_TABLET)[0];
   }
   
 }

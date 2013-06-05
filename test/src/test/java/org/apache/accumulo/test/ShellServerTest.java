@@ -161,7 +161,7 @@ public class ShellServerTest {
   public static void tearDownAfterClass() throws Exception {
     cluster.stop();
     traceProcess.destroy();
-//    folder.delete();
+    folder.delete();
   }
 
   @Test(timeout = 30000)

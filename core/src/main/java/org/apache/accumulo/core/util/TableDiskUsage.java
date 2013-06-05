@@ -81,7 +81,7 @@ public class TableDiskUsage {
   }
   
   Map<List<String>,Long> calculateUsage() {
-    
+
     Map<List<Integer>,Long> usage = new HashMap<List<Integer>,Long>();
     
     for (Entry<String,Integer[]> entry : tableFiles.entrySet()) {
@@ -138,6 +138,8 @@ public class TableDiskUsage {
     HashSet<String> tablesReferenced = new HashSet<String>(tableIds);
     HashSet<String> emptyTableIds = new HashSet<String>();
     
+    final String TABLES = Constants.getTablesDir(acuConf);
+
     for (String tableId : tableIds) {
       Scanner mdScanner = null;
       try {
@@ -152,20 +154,24 @@ public class TableDiskUsage {
         emptyTableIds.add(tableId);
       }
       
+      // TODO ACCUMULO-118 there are multiple table locations/filesystems
       for (Entry<Key,Value> entry : mdScanner) {
         String file = entry.getKey().getColumnQualifier().toString();
-        if (file.startsWith("../")) {
+        if (file.contains(":")) {
+          file = file.substring(file.indexOf(TABLES) + TABLES.length());
+        } else if (file.startsWith("../")) {
           file = file.substring(2);
           tablesReferenced.add(file.split("\\/")[1]);
-        } else
+        } else {
           file = "/" + tableId + file;
+        }
         
         tdu.linkFileAndTable(tableId, file);
       }
     }
     
     for (String tableId : tablesReferenced) {
-      FileStatus[] files = fs.globStatus(new Path(Constants.getTablesDir(acuConf) + "/" + tableId + "/*/*"));
+      FileStatus[] files = fs.globStatus(new Path(TABLES + "/" + tableId + "/*/*"));
       
       for (FileStatus fileStatus : files) {
         String dir = fileStatus.getPath().getParent().getName();
