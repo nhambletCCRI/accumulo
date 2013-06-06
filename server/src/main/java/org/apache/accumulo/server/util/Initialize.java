@@ -34,12 +34,12 @@ import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.impl.thrift.ThriftSecurityException;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
+import org.apache.accumulo.core.conf.SiteConfiguration;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.file.FileOperations;
 import org.apache.accumulo.core.file.FileSKVWriter;
-import org.apache.accumulo.core.file.FileUtil;
 import org.apache.accumulo.core.iterators.user.VersioningIterator;
 import org.apache.accumulo.core.master.state.tables.TableState;
 import org.apache.accumulo.core.master.thrift.MasterGoalState;
@@ -53,6 +53,8 @@ import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.accumulo.server.constraints.MetadataConstraints;
+import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.FileSystemImpl;
 import org.apache.accumulo.server.iterators.MetadataBulkLoadFilter;
 import org.apache.accumulo.server.master.state.tables.TableManager;
 import org.apache.accumulo.server.security.AuditedSecurityOperation;
@@ -61,7 +63,6 @@ import org.apache.accumulo.server.tabletserver.TabletTime;
 import org.apache.accumulo.server.zookeeper.ZooReaderWriter;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
@@ -117,7 +118,7 @@ public class Initialize {
     if (!ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_URI).equals(""))
       log.info("Hadoop Filesystem is " + ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_URI));
     else
-      log.info("Hadoop Filesystem is " + FileSystem.getDefaultUri(conf));
+      log.info("Hadoop Filesystem is " + org.apache.hadoop.fs.FileSystem.getDefaultUri(conf));
     
     log.info("Accumulo data dirs are " + Arrays.asList(ServerConstants.getBaseDirs()));
     log.info("Zookeeper server is " + ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_ZK_HOST));
@@ -172,7 +173,7 @@ public class Initialize {
     }
     
     try {
-      initFileSystem(opts, fs, fs.getConf(), uuid);
+      initFileSystem(opts, fs, uuid);
     } catch (Exception e) {
       log.fatal("Failed to initialize filesystem", e);
       return false;
@@ -219,7 +220,7 @@ public class Initialize {
     return result.toArray(a);
   }
   
-  private static void initFileSystem(Opts opts, FileSystem fs, Configuration conf, UUID uuid) throws IOException {
+  private static void initFileSystem(Opts opts, FileSystem fs, UUID uuid) throws IOException {
     FileStatus fstat;
     
     // the actual disk location of the root tablet
@@ -274,7 +275,8 @@ public class Initialize {
     // metadata tablets
     String initRootTabFile = rootTablet + "/00000_00000."
         + FileOperations.getNewFileExtension(AccumuloConfiguration.getDefaultConfiguration());
-    FileSKVWriter mfw = FileOperations.getInstance().openWriter(initRootTabFile, fs, conf, AccumuloConfiguration.getDefaultConfiguration());
+    org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(new Path(initRootTabFile));
+    FileSKVWriter mfw = FileOperations.getInstance().openWriter(initRootTabFile, ns, ns.getConf(), AccumuloConfiguration.getDefaultConfiguration());
     mfw.startDefaultLocalityGroup();
     
     // -----------] root tablet info
@@ -501,7 +503,7 @@ public class Initialize {
       SecurityUtil.serverLogin();
       Configuration conf = CachedConfiguration.getInstance();
       
-      FileSystem fs = FileUtil.getFileSystem(conf, ServerConfiguration.getSiteConfiguration());
+      FileSystem fs = FileSystemImpl.get(SiteConfiguration.getSiteConfiguration());
       
       if (opts.resetSecurity) {
         if (isInitialized(fs)) {

@@ -231,7 +231,7 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
 
   @Override
   public FileSystem getFileSystemByPath(Path path) {
-    if (path.isAbsolute())
+    if (path.toString().contains(":"))
     {
       try {
         return path.getFileSystem(CachedConfiguration.getInstance());
@@ -297,6 +297,10 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
 
   public static org.apache.accumulo.server.fs.FileSystem get() throws IOException {
     AccumuloConfiguration conf = ServerConfiguration.getSystemConfiguration(HdfsZooInstance.getInstance());
+    return get(conf);
+  }
+
+  public static org.apache.accumulo.server.fs.FileSystem get(AccumuloConfiguration conf) throws IOException {
     return new FileSystemImpl(Collections.singletonMap("", FileSystem.get(CachedConfiguration.getInstance())), "", conf);
   }
 
