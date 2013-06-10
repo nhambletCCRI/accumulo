@@ -61,6 +61,7 @@ public class AccumuloVFSClassLoader {
   
   public static class AccumuloVFSClassLoaderShutdownThread implements Runnable {
     
+    @Override
     public void run() {
       try {
         AccumuloVFSClassLoader.close();
@@ -99,7 +100,7 @@ public class AccumuloVFSClassLoader {
   
   public synchronized static <U> Class<? extends U> loadClass(String classname, Class<U> extension) throws ClassNotFoundException {
     try {
-      return (Class<? extends U>) getClassLoader().loadClass(classname).asSubclass(extension);
+      return getClassLoader().loadClass(classname).asSubclass(extension);
     } catch (IOException e) {
       throw new ClassNotFoundException("IO Error loading class " + classname, e);
     }
@@ -280,6 +281,28 @@ public class AccumuloVFSClassLoader {
         System.out.println(s);
       }
     });
+  }
+  
+  public static URL[] getURLs() {
+    ArrayList<URL> urls = new ArrayList<URL>(20);
+    try {
+      ClassLoader cl = getClassLoader();
+      while (cl != null && cl != ClassLoader.getSystemClassLoader()) {
+        if (cl instanceof URLClassLoader) {
+          URLClassLoader ucl = (URLClassLoader) cl;
+          for (URL u : ucl.getURLs())
+            urls.add(u);
+        } else if (cl instanceof VFSClassLoader) {
+          VFSClassLoader vcl = (VFSClassLoader) cl;
+          for (FileObject f : vcl.getFileObjects())
+            urls.add(f.getURL());
+        }
+        cl = cl.getParent();
+      }
+    } catch (Exception t) {
+      throw new RuntimeException(t);
+    }
+    return urls.toArray(new URL[urls.size()]);
   }
   
   public static void printClassPath(Printer out) {

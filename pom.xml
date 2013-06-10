@@ -72,6 +72,7 @@
     <maven>${maven.min-version}</maven>
   </prerequisites>
   <modules>
+    <module>api</module>
     <module>trace</module>
     <module>core</module>
     <module>fate</module>
@@ -205,6 +206,16 @@
         <version>1.2.16</version>
       </dependency>
       <dependency>
+        <groupId>net.sf.scannotation</groupId>
+        <artifactId>scannotation</artifactId>
+        <version>1.0.2</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.accumulo</groupId>
+        <artifactId>accumulo-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.accumulo</groupId>
         <artifactId>accumulo-core</artifactId>
         <version>${project.version}</version>
@@ -310,6 +321,11 @@
         <groupId>org.easymock</groupId>
         <artifactId>easymock</artifactId>
         <version>3.1</version>
+      </dependency>
+      <dependency>
+        <groupId>org.javassist</groupId>
+        <artifactId>javassist</artifactId>
+        <version>3.17.1-GA</version>
       </dependency>
       <dependency>
         <groupId>org.mortbay.jetty</groupId>

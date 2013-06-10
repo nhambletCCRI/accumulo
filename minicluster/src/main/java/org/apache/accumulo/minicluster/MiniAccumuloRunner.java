@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
+import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.util.Pair;
 import org.apache.commons.io.FileUtils;
@@ -58,6 +59,7 @@ import com.google.common.io.Files;
  * 
  * @since 1.6.0
  */
+@AccumuloService("minicluster")
 public class MiniAccumuloRunner {
   public static class PropertiesConverter implements IStringConverter<Properties> {
     @Override

@@ -37,6 +37,7 @@ import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
@@ -175,6 +176,7 @@ import org.apache.zookeeper.data.Stat;
  * 
  * The master will also coordinate log recoveries and reports general status.
  */
+@AccumuloService("master")
 public class Master implements LiveTServerSet.Listener, TableObserver, CurrentState {
   
   final private static Logger log = Logger.getLogger(Master.class);

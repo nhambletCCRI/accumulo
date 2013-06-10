@@ -37,6 +37,7 @@ import java.util.UUID;
 import jline.console.ConsoleReader;
 import jline.console.history.FileHistory;
 
+import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
@@ -158,6 +159,7 @@ import com.beust.jcommander.ParameterException;
 /**
  * A convenient console interface to perform basic accumulo functions Includes auto-complete, help, and quoted strings with escape sequences
  */
+@AccumuloService("shell")
 public class Shell extends ShellOptions {
   public static final Logger log = Logger.getLogger(Shell.class);
   private static final Logger audit = Logger.getLogger(Shell.class.getName() + ".audit");

@@ -32,7 +32,9 @@
         <include>com.google.code.gson:gson</include>
         <include>com.google.guava:guava</include>
         <include>jline:jline</include>
+        <include>net.sf.scannotation:scannotation</include>
         <include>org.apache.thrift:libthrift</include>
+        <include>org.javassist:javassist</include>
       </includes>
       <excludes>
         <exclude>${groupId}:${artifactId}-docs</exclude>

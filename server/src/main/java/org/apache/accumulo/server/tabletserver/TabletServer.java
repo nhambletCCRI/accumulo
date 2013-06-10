@@ -64,6 +64,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
 
+import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
@@ -226,6 +227,7 @@ enum ScanRunState {
   QUEUED, RUNNING, FINISHED
 }
 
+@AccumuloService("tserver")
 public class TabletServer extends AbstractMetricsImpl implements org.apache.accumulo.server.tabletserver.metrics.TabletServerMBean {
   private static final Logger log = Logger.getLogger(TabletServer.class);
   

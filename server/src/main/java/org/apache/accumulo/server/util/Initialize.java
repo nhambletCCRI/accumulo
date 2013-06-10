@@ -25,6 +25,7 @@ import java.util.UUID;
 
 import jline.console.ConsoleReader;
 
+import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
@@ -71,6 +72,7 @@ import com.beust.jcommander.Parameter;
  * This class is used to setup the directory structure and the root tablet to get an instance started
  * 
  */
+@AccumuloService("init")
 public class Initialize {
   private static final Logger log = Logger.getLogger(Initialize.class);
   private static final String DEFAULT_ROOT_USER = "root";

@@ -16,6 +16,7 @@
  */
 package org.apache.accumulo.server.util;
 
+import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.client.Instance;
@@ -27,6 +28,7 @@ import org.apache.hadoop.fs.Path;
 
 import com.beust.jcommander.Parameter;
 
+@AccumuloService("zookeeper")
 public class ZooKeeperMain {
   
   static class Opts extends Help {
@@ -50,7 +52,7 @@ public class ZooKeeperMain {
     }
     System.out.println("The accumulo instance id is " + instance.getInstanceID());
     if (!opts.servers.contains("/"))
-      opts.servers += "/accumulo/"+instance.getInstanceID(); 
-    org.apache.zookeeper.ZooKeeperMain.main(new String[]{"-server", opts.servers, "-timeout", "" + (opts.timeout * 1000)});
+      opts.servers += "/accumulo/" + instance.getInstanceID();
+    org.apache.zookeeper.ZooKeeperMain.main(new String[] {"-server", opts.servers, "-timeout", "" + (opts.timeout * 1000)});
   }
 }

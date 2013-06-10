@@ -19,6 +19,7 @@ package org.apache.accumulo.core.file.rfile;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.data.ByteSequence;
@@ -34,6 +35,7 @@ import org.apache.hadoop.fs.Path;
 
 import com.beust.jcommander.Parameter;
 
+@AccumuloService("rfile-info")
 public class PrintInfo {
   
   static class Opts extends Help {
@@ -49,7 +51,7 @@ public class PrintInfo {
     Configuration conf = new Configuration();
     @SuppressWarnings("deprecation")
     FileSystem hadoopFs = FileUtil.getFileSystem(conf, AccumuloConfiguration.getSiteConfiguration());
-    FileSystem localFs  = FileSystem.getLocal(conf);
+    FileSystem localFs = FileSystem.getLocal(conf);
     Opts opts = new Opts();
     opts.parseArgs(PrintInfo.class.getName(), args);
     if (opts.files.isEmpty()) {

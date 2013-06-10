@@ -23,6 +23,7 @@ import java.io.PrintStream;
 
 import jline.console.ConsoleReader;
 
+import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.cli.ClientOpts.Password;
 import org.apache.accumulo.core.cli.ClientOpts.PasswordConverter;
@@ -35,6 +36,7 @@ import org.apache.accumulo.core.security.CredentialHelper;
 
 import com.beust.jcommander.Parameter;
 
+@AccumuloService("create-token")
 public class CreateToken {
   
   private static ConsoleReader reader = null;

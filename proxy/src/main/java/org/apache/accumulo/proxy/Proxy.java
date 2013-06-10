@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.util.Properties;
 
+import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.minicluster.MiniAccumuloCluster;
@@ -40,6 +41,7 @@ import com.beust.jcommander.IStringConverter;
 import com.beust.jcommander.Parameter;
 import com.google.common.io.Files;
 
+@AccumuloService("proxy")
 public class Proxy {
   
   private static final Logger log = Logger.getLogger(Proxy.class);
@@ -100,6 +102,7 @@ public class Proxy {
       opts.prop.setProperty("instance", accumulo.getConfig().getInstanceName());
       opts.prop.setProperty("zookeepers", accumulo.getConfig().getZooKeepers());
       Runtime.getRuntime().addShutdownHook(new Thread() {
+        @Override
         public void start() {
           try {
             accumulo.stop();
@@ -128,7 +131,7 @@ public class Proxy {
     
     Class<?> proxyProcClass = Class.forName(api.getName() + "$Processor");
     Class<?> proxyIfaceClass = Class.forName(api.getName() + "$Iface");
-
+    
     @SuppressWarnings("unchecked")
     Constructor<? extends TProcessor> proxyProcConstructor = (Constructor<? extends TProcessor>) proxyProcClass.getConstructor(proxyIfaceClass);
     
@@ -139,7 +142,7 @@ public class Proxy {
     final long maxFrameSize = AccumuloConfiguration.getMemoryInBytes(properties.getProperty("maxFrameSize", "16M"));
     if (maxFrameSize > Integer.MAX_VALUE)
       throw new RuntimeException(maxFrameSize + " is larger than MAX_INT");
-    args.transportFactory(new TFramedTransport.Factory((int)maxFrameSize));
+    args.transportFactory(new TFramedTransport.Factory((int) maxFrameSize));
     args.protocolFactory(protoClass.newInstance());
     return new THsHaServer(args);
   }
