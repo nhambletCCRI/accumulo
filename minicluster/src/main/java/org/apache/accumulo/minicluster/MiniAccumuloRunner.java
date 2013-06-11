@@ -27,9 +27,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
-import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.util.Pair;
+import org.apache.accumulo.start.annotations.AccumuloService;
 import org.apache.commons.io.FileUtils;
 
 import com.beust.jcommander.IStringConverter;

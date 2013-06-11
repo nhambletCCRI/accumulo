@@ -27,7 +27,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.Instance;
 import org.apache.accumulo.core.client.impl.MasterClient;
@@ -73,6 +72,7 @@ import org.apache.accumulo.server.problems.ProblemReports;
 import org.apache.accumulo.server.problems.ProblemType;
 import org.apache.accumulo.server.security.SecurityConstants;
 import org.apache.accumulo.server.util.EmbeddedWebServer;
+import org.apache.accumulo.start.annotations.AccumuloService;
 import org.apache.accumulo.trace.instrument.Tracer;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.log4j.Logger;

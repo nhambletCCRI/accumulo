@@ -64,7 +64,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
 
-import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
@@ -199,6 +198,7 @@ import org.apache.accumulo.server.zookeeper.ZooCache;
 import org.apache.accumulo.server.zookeeper.ZooLock;
 import org.apache.accumulo.server.zookeeper.ZooReaderWriter;
 import org.apache.accumulo.start.Platform;
+import org.apache.accumulo.start.annotations.AccumuloService;
 import org.apache.accumulo.start.classloader.vfs.AccumuloVFSClassLoader;
 import org.apache.accumulo.start.classloader.vfs.ContextManager;
 import org.apache.accumulo.trace.instrument.Span;

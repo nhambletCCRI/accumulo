@@ -37,7 +37,6 @@ import java.util.UUID;
 import jline.console.ConsoleReader;
 import jline.console.history.FileHistory;
 
-import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.AccumuloException;
 import org.apache.accumulo.core.client.AccumuloSecurityException;
@@ -142,6 +141,7 @@ import org.apache.accumulo.core.util.shell.commands.UserPermissionsCommand;
 import org.apache.accumulo.core.util.shell.commands.UsersCommand;
 import org.apache.accumulo.core.util.shell.commands.WhoAmICommand;
 import org.apache.accumulo.fate.zookeeper.ZooReader;
+import org.apache.accumulo.start.annotations.AccumuloService;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.HelpFormatter;

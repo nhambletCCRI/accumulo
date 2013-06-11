@@ -36,7 +36,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.client.AccumuloException;
@@ -86,6 +85,7 @@ import org.apache.accumulo.server.util.OfflineMetadataScanner;
 import org.apache.accumulo.server.util.TServerUtils;
 import org.apache.accumulo.server.util.TabletIterator;
 import org.apache.accumulo.server.zookeeper.ZooLock;
+import org.apache.accumulo.start.annotations.AccumuloService;
 import org.apache.accumulo.trace.instrument.CountSampler;
 import org.apache.accumulo.trace.instrument.Sampler;
 import org.apache.accumulo.trace.instrument.Span;

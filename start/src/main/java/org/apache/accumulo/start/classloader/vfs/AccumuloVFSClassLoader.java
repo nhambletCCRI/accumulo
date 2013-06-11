@@ -24,7 +24,10 @@ import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
+import org.apache.accumulo.start.annotations.AccumuloService;
 import org.apache.accumulo.start.classloader.AccumuloClassLoader;
 import org.apache.accumulo.start.classloader.vfs.providers.HdfsFileProvider;
 import org.apache.commons.vfs2.CacheStrategy;
@@ -37,6 +40,7 @@ import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
 import org.apache.commons.vfs2.impl.FileContentInfoFilenameFactory;
 import org.apache.commons.vfs2.impl.VFSClassLoader;
 import org.apache.log4j.Logger;
+import org.scannotation.AnnotationDB;
 
 /**
  * This class builds a hierarchy of Classloaders in the form of:
@@ -283,19 +287,73 @@ public class AccumuloVFSClassLoader {
     });
   }
   
-  public static URL[] getURLs() {
+  private static AnnotationDB annotationDatabase;
+  
+  private static void loadAnnotationDatabase() {
+    if (annotationDatabase == null) {
+      AnnotationDB database = new AnnotationDB();
+      database.setScanClassAnnotations(true);
+      try {
+        database.scanArchives(getAccumuloServiceURLs());
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+      annotationDatabase = database;
+    }
+  }
+  
+  public static Set<String> getAccumuloServiceClasses() {
+    loadAnnotationDatabase();
+    Set<String> retVal = annotationDatabase.getAnnotationIndex().get(AccumuloService.class.getName());
+    if (retVal == null)
+      retVal = Collections.emptySet();
+    return retVal;
+  }
+  
+  public static Class<?> getAccumuloServiceClassByKeyword(String keyword) {
+    Set<String> classNames = getAccumuloServiceClasses();
+    for (String className : classNames) {
+      try {
+        Class<?> candidate = getClassLoader().loadClass(className);
+        if (candidate.getAnnotation(AccumuloService.class).value().equals(keyword))
+          return candidate;
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+    return null;
+  }
+  
+  public static Set<String> getAccumuloServiceKeywords() {
+    TreeSet<String> keywords = new TreeSet<String>();
+    Set<String> classNames = getAccumuloServiceClasses();
+    for (String className : classNames) {
+      try {
+        keywords.add(getClassLoader().loadClass(className).getAnnotation(AccumuloService.class).value());
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+    return keywords;
+  }
+  
+  public static URL[] getAccumuloServiceURLs() {
     ArrayList<URL> urls = new ArrayList<URL>(20);
     try {
       ClassLoader cl = getClassLoader();
       while (cl != null && cl != ClassLoader.getSystemClassLoader()) {
         if (cl instanceof URLClassLoader) {
           URLClassLoader ucl = (URLClassLoader) cl;
-          for (URL u : ucl.getURLs())
-            urls.add(u);
+          for (URL u : ucl.getURLs()) {
+            if (u.toExternalForm().contains("accumulo"))
+              urls.add(u);
+          }
         } else if (cl instanceof VFSClassLoader) {
           VFSClassLoader vcl = (VFSClassLoader) cl;
-          for (FileObject f : vcl.getFileObjects())
-            urls.add(f.getURL());
+          for (FileObject f : vcl.getFileObjects()) {
+            if (f.getURL().toExternalForm().contains("accumulo"))
+              urls.add(f.getURL());
+          }
         }
         cl = cl.getParent();
       }

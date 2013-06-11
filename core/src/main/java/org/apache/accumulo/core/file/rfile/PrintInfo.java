@@ -19,7 +19,6 @@ package org.apache.accumulo.core.file.rfile;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.data.ByteSequence;
@@ -29,6 +28,7 @@ import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.file.FileUtil;
 import org.apache.accumulo.core.file.blockfile.impl.CachableBlockFile;
 import org.apache.accumulo.core.file.rfile.RFile.Reader;
+import org.apache.accumulo.start.annotations.AccumuloService;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;

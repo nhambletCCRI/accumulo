@@ -16,21 +16,14 @@
  */
 package org.apache.accumulo.start;
 
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.net.URL;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Set;
 
-import org.apache.accumulo.api.annotations.AccumuloService;
 import org.apache.accumulo.start.classloader.AccumuloClassLoader;
-import org.scannotation.AnnotationDB;
 
 public class Main {
-  
-  private static AnnotationDB annotationDatabase;
   
   public static void main(String[] args) throws Exception {
     Runnable r = null;
@@ -41,10 +34,8 @@ public class Main {
       ClassLoader cl = (ClassLoader) vfsClassLoader.getMethod("getClassLoader", new Class[] {}).invoke(null, new Object[] {});
       Thread.currentThread().setContextClassLoader(cl);
       
-      URL[] urls = (URL[]) vfsClassLoader.getMethod("getURLs", new Class[] {}).invoke(null, new Object[] {});
-      
       if (args.length == 0) {
-        printUsage(cl, urls);
+        printUsage();
         System.exit(1);
       }
       final String argsToPass[] = new String[args.length - 1];
@@ -60,14 +51,7 @@ public class Main {
         System.out.println(runTMP.getField("VERSION").get(null));
         return;
       } else {
-        for (String className : loadAnnotationDB(urls, AccumuloService.class)) {
-          Class<?> runTMPCandidate = cl.loadClass(className);
-          if (args[0].equals(runTMPCandidate.getAnnotation(AccumuloService.class).value())) {
-            runTMP = runTMPCandidate;
-            break;
-          }
-        }
-        
+        runTMP = getAccumuloServiceClassByKeyword(args[0]);
         if (runTMP == null) {
           try {
             runTMP = cl.loadClass(args[0]);
@@ -111,11 +95,10 @@ public class Main {
     }
   }
   
-  private static void printUsage(ClassLoader cl, URL[] urls) throws IOException, ClassNotFoundException {
+  private static void printUsage() throws Exception {
     ArrayList<String> keywords = new ArrayList<String>(20);
-    for (String className : loadAnnotationDB(urls, AccumuloService.class)) {
-      Class<?> runTMPCandidate = cl.loadClass(className);
-      keywords.add(runTMPCandidate.getAnnotation(AccumuloService.class).value());
+    for (String keyword : getAccumuloServiceKeywords()) {
+      keywords.add(keyword);
     }
     keywords.add("classpath");
     keywords.add("version");
@@ -129,14 +112,16 @@ public class Main {
     System.out.println("accumulo " + kwString + " | <accumulo class> args");
   }
   
-  protected synchronized static Set<String> loadAnnotationDB(URL[] urls, Class<?> annotationClass) throws IOException {
-    if (annotationDatabase == null) {
-      AnnotationDB database = new AnnotationDB();
-      database.setScanClassAnnotations(true);
-      database.scanArchives(urls);
-      annotationDatabase = database;
-    }
-    Set<String> retVal = annotationDatabase.getAnnotationIndex().get(annotationClass.getName());
-    return retVal == null ? (retVal = Collections.emptySet()) : retVal;
+  private static Set<String> getAccumuloServiceKeywords() throws Exception {
+    Class<?> vfsClassLoader = AccumuloClassLoader.getClassLoader().loadClass("org.apache.accumulo.start.classloader.vfs.AccumuloVFSClassLoader");
+    @SuppressWarnings("unchecked")
+    Set<String> keywords = (Set<String>) vfsClassLoader.getMethod("getAccumuloServiceKeywords").invoke(null);
+    return keywords;
+  }
+  
+  private static Class<?> getAccumuloServiceClassByKeyword(String keyword) throws Exception {
+    Class<?> vfsClassLoader = AccumuloClassLoader.getClassLoader().loadClass("org.apache.accumulo.start.classloader.vfs.AccumuloVFSClassLoader");
+    Class<?> serviceClass = (Class<?>) vfsClassLoader.getMethod("getAccumuloServiceClassByKeyword", String.class).invoke(null, keyword);
+    return serviceClass;
   }
 }
