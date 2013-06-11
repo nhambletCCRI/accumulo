@@ -29,7 +29,6 @@ script=$( basename "$SOURCE" )
 . "$bin"/config.sh
 
 START_JAR=$ACCUMULO_HOME/lib/accumulo-start.jar
-SCANNOTATION_JARS=$ACCUMULO_HOME/lib/scannotation.jar:$ACCUMULO_HOME/lib/javassist.jar
 
 #
 # Resolve a program to its installation directory
@@ -82,7 +81,7 @@ esac
 
 XML_FILES=${ACCUMULO_HOME}/conf
 LOG4J_JAR=$(find $HADOOP_PREFIX/lib $HADOOP_PREFIX/share/hadoop/common/lib -name 'log4j*.jar' -print 2>/dev/null | head -1)
-CLASSPATH=${XML_FILES}:${SCANNOTATION_JARS}:${START_JAR}:${LOG4J_JAR}
+CLASSPATH=${XML_FILES}:${START_JAR}:${LOG4J_JAR}
 
 if [ -z "$JAVA_HOME" -o ! -d "$JAVA_HOME" ]; then
    echo "JAVA_HOME is not set or is not a directory.  Please make sure it's set globally or in conf/accumulo-env.sh"
