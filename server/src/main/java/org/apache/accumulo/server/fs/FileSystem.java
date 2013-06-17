@@ -109,10 +109,10 @@ public interface FileSystem {
   FileStatus[] globStatus(Path path) throws IOException;
 
   // Convert a file or directory !METADATA reference into a path
-  String getFullPath(Key key);
+  Path getFullPath(Key key);
   
   // Given a filename, figure out the qualified path given multiple namespaces
-  String getFullPath(String paths[], String fileName) throws IOException;
+  Path getFullPath(String paths[], String fileName) throws IOException;
 
   // forward to the appropriate FileSystem object
   ContentSummary getContentSummary(String dir);

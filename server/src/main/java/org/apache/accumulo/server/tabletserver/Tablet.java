@@ -771,7 +771,7 @@ public class Tablet {
       mergingMinorCompactionFile = null;
     }
     
-    void bringMinorCompactionOnline(FileRef tmpDatafile, FileRef newDatafile, FileRef absMergeFile, DataFileValue dfv, CommitSession commitSession, long flushId) {
+    void bringMinorCompactionOnline(FileRef tmpDatafile, FileRef newDatafile, FileRef absMergeFile, DataFileValue dfv, CommitSession commitSession, long flushId) throws IOException {
       
       IZooReaderWriter zoo = ZooReaderWriter.getRetryingInstance();
       if (extent.isRootTablet()) {
@@ -1137,7 +1137,7 @@ public class Tablet {
           break;
         }
         
-        FileRef ref = new FileRef(entry.getKey().getColumnQualifier().toString(), new Path(fs.getFullPath(entry.getKey())));
+        FileRef ref = new FileRef(entry.getKey().getColumnQualifier().toString(), fs.getFullPath(entry.getKey()));
         datafiles.put(ref, new DataFileValue(entry.getValue().get()));
       }
     }
@@ -1178,8 +1178,8 @@ public class Tablet {
       Key key = entry.getKey();
       if (key.getRow().equals(row) && key.getColumnFamily().equals(Constants.METADATA_SCANFILE_COLUMN_FAMILY)) {
         String meta = key.getColumnQualifier().toString();
-        String path = fs.getFullPath(ServerConstants.getTablesDirs(), meta);
-        scanFiles.add(new FileRef(meta, new Path(path)));
+        Path path = fs.getFullPath(ServerConstants.getTablesDirs(), meta);
+        scanFiles.add(new FileRef(meta, path));
       }
     }
     
@@ -1376,7 +1376,8 @@ public class Tablet {
       for (LogEntry logEntry : logEntries) {
         for (String log : logEntry.logSet) {
           String[] parts = log.split("/", 2);
-          currentLogs.add(new DfsLogger(tabletServer.getServerConfig(), logEntry.server, parts[1]));
+          Path file = fs.getFullPath(ServerConstants.getWalDirs(), parts[1]);
+          currentLogs.add(new DfsLogger(tabletServer.getServerConfig(), logEntry.server, file));
         }
       }
       
@@ -2061,9 +2062,9 @@ public class Tablet {
           commitSession, flushId);
       span.stop();
       return new DataFileValue(stats.getFileSize(), stats.getEntriesWritten());
-    } catch (RuntimeException E) {
+    } catch (Exception E) {
       failed = true;
-      throw E;
+      throw new RuntimeException(E);
     } catch (Error E) {
       // Weird errors like "OutOfMemoryError" when trying to create the thread for the compaction
       failed = true;

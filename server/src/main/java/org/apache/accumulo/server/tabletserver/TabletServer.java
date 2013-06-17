@@ -2054,10 +2054,10 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
     public void removeLogs(TInfo tinfo, TCredentials credentials, List<String> filenames) throws TException {
       String myname = getClientAddressString();
       myname = myname.replace(':', '+');
-      Path logDir = new Path(Constants.getWalDirectory(acuConf), myname);
       Set<String> loggers = new HashSet<String>();
       logger.getLoggers(loggers);
       nextFile: for (String filename : filenames) {
+        // skip any log we're currently using
         for (String logger : loggers) {
           if (logger.contains(filename))
             continue nextFile;
@@ -2074,28 +2074,30 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
             }
           }
         }
+        
         try {
-          String source = logDir + "/" + filename;
+          Path source = new Path(filename);
           if (acuConf.getBoolean(Property.TSERV_ARCHIVE_WALOGS)) {
-            String walogArchive = Constants.getBaseDir(acuConf) + "/walogArchive";
-            fs.mkdirs(new Path(walogArchive));
-            String dest = walogArchive + "/" + filename;
+            Path walogArchive = fs.matchingFileSystem(source, ServerConstants.getWalogArchives());
+            fs.mkdirs(walogArchive);
+            Path dest = new Path(walogArchive, source.getName());
             log.info("Archiving walog " + source + " to " + dest);
-            if (!fs.rename(new Path(source), new Path(dest)))
+            if (!fs.rename(source, dest))
               log.error("rename is unsuccessful");
           } else {
             log.info("Deleting walog " + filename);
-            Path sourcePath = new Path(source);
+            Path sourcePath = new Path(filename);
             if (!fs.moveToTrash(sourcePath) && !fs.deleteRecursively(sourcePath))
               log.warn("Failed to delete walog " + source);
-            Path recoveryPath = new Path(Constants.getRecoveryDir(acuConf), filename);
-            try {
-              if (fs.moveToTrash(recoveryPath) || fs.deleteRecursively(recoveryPath))
-                log.info("Deleted any recovery log " + filename);
-            } catch (FileNotFoundException ex) {
-              // ignore
+            for (String recovery : ServerConstants.getRecoveryDirs()) {
+              Path recoveryPath = new Path(recovery, source.getName());
+              try {
+                if (fs.moveToTrash(recoveryPath) || fs.deleteRecursively(recoveryPath))
+                  log.info("Deleted any recovery log " + filename);
+              } catch (FileNotFoundException ex) {
+                // ignore
+              }
             }
-            
           }
         } catch (IOException e) {
           log.warn("Error attempting to delete write-ahead log " + filename + ": " + e);
@@ -3243,7 +3245,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
   }
   
   public void recover(FileSystem fs, Tablet tablet, List<LogEntry> logEntries, Set<String> tabletFiles, MutationReceiver mutationReceiver) throws IOException {
-    List<String> recoveryLogs = new ArrayList<String>();
+    List<Path> recoveryLogs = new ArrayList<Path>();
     List<LogEntry> sorted = new ArrayList<LogEntry>(logEntries);
     Collections.sort(sorted, new Comparator<LogEntry>() {
       @Override
@@ -3252,14 +3254,13 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
       }
     });
     for (LogEntry entry : sorted) {
-      String recovery = null;
+      Path recovery = null;
       for (String log : entry.logSet) {
         String[] parts = log.split("/"); // "host:port/filename"
-        log = fs.getFullPath(ServerConstants.getRecoveryDirs(), parts[1]);
-        Path finished = new Path(log + "/finished");
+        Path finished = new Path(fs.getFullPath(ServerConstants.getRecoveryDirs(), parts[parts.length - 1]), "finished");
         TabletServer.log.info("Looking for " + finished);
         if (fs.exists(finished)) {
-          recovery = log;
+          recovery = finished.getParent();
           break;
         }
       }

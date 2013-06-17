@@ -118,7 +118,7 @@ public class SortedLogRecoveryTest {
     final String workdir = "file://" + root.getRoot().getAbsolutePath() + "/workdir";
     FileSystem fs = FileSystemImpl.getLocal();
     fs.deleteRecursively(new Path(workdir));
-    ArrayList<String> dirs = new ArrayList<String>();
+    ArrayList<Path> dirs = new ArrayList<Path>();
     try {
       for (Entry<String,KeyValue[]> entry : logs.entrySet()) {
         String path = workdir + "/" + entry.getKey();
@@ -129,7 +129,7 @@ public class SortedLogRecoveryTest {
         }
         map.close();
         ns.create(new Path(path, "finished")).close();
-        dirs.add(path);
+        dirs.add(new Path(path));
       }
       // Recover
       SortedLogRecovery recovery = new SortedLogRecovery(fs);

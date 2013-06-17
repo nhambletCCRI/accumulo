@@ -52,6 +52,7 @@ import org.apache.accumulo.fate.Repo;
 import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeExistsPolicy;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.client.HdfsZooInstance;
+import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.accumulo.server.master.Master;
 import org.apache.accumulo.server.master.state.tables.TableManager;
 import org.apache.accumulo.server.security.AuditedSecurityOperation;
@@ -61,7 +62,6 @@ import org.apache.accumulo.server.tabletserver.UniqueNameAllocator;
 import org.apache.accumulo.server.util.MetadataTable;
 import org.apache.accumulo.server.util.TablePropUtil;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
@@ -314,7 +314,7 @@ class MapImportFileNames extends MasterRepo {
       FileSystem fs = environment.getFileSystem();
       
       fs.mkdirs(new Path(tableInfo.importDir));
-      
+
       FileStatus[] files = fs.listStatus(new Path(tableInfo.exportDir));
       
       UniqueNameAllocator namer = UniqueNameAllocator.getInstance();
@@ -323,7 +323,7 @@ class MapImportFileNames extends MasterRepo {
       
       for (FileStatus fileStatus : files) {
         String fileName = fileStatus.getPath().getName();
-        
+        log.info("filename " + fileStatus.getPath().toString());
         String sa[] = fileName.split("\\.");
         String extension = "";
         if (sa.length > 1) {

@@ -572,7 +572,10 @@ public class SimpleGarbageCollector implements Iface {
             delete = cf.substring(2);
           } else {
             String table = new String(KeyExtent.tableOfMetadataRow(entry.getKey().getRow()));
-            delete = "/" + table + cf;
+            if (cf.startsWith("/"))
+              delete = "/" + table + cf;
+            else
+              delete = "/" + table + "/" + cf;
           }
           // WARNING: This line is EXTREMELY IMPORTANT.
           // You MUST REMOVE candidates that are still in use
@@ -662,25 +665,27 @@ public class SimpleGarbageCollector implements Iface {
           boolean removeFlag;
           
           try {
-            String fullPath = fs.getFullPath(ServerConstants.getTablesDirs(), delete);
+            Path fullPath;
+            if (delete.contains(":"))
+              fullPath = new Path(delete.split("/", 3)[2]);
+            else
+              fullPath = fs.getFullPath(ServerConstants.getTablesDirs(), delete);
             log.debug("Deleting " + fullPath);
             
-            Path p = new Path(fullPath);
-            
-            if (moveToTrash(p) || fs.deleteRecursively(p)) {
+            if (moveToTrash(fullPath) || fs.deleteRecursively(fullPath)) {
               // delete succeeded, still want to delete
               removeFlag = true;
               synchronized (SimpleGarbageCollector.this) {
                 ++status.current.deleted;
               }
-            } else if (fs.exists(p)) {
+            } else if (fs.exists(fullPath)) {
               // leave the entry in the METADATA table; we'll try again
               // later
               removeFlag = false;
               synchronized (SimpleGarbageCollector.this) {
                 ++status.current.errors;
               }
-              log.warn("File exists, but was not deleted for an unknown reason: " + p);
+              log.warn("File exists, but was not deleted for an unknown reason: " + fullPath);
             } else {
               // this failure, we still want to remove the METADATA table
               // entry
@@ -697,7 +702,7 @@ public class SimpleGarbageCollector implements Iface {
                 if (tableState != null && tableState != TableState.DELETING) {
                   // clone directories don't always exist
                   if (!tabletDir.startsWith("c-"))
-                    log.warn("File doesn't exist: " + p);
+                    log.warn("File doesn't exist: " + fullPath);
                 }
               } else {
                 log.warn("Very strange path name: " + delete);

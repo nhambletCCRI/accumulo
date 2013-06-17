@@ -51,6 +51,7 @@ import org.apache.accumulo.server.problems.ProblemReportingIterator;
 import org.apache.accumulo.server.problems.ProblemReports;
 import org.apache.accumulo.server.problems.ProblemType;
 import org.apache.accumulo.server.util.time.SimpleTimer;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
 
@@ -305,10 +306,10 @@ public class FileManager {
     // open any files that need to be opened
     for (String file : filesToOpen) {
       try {
-        // log.debug("Opening "+file);
-        String path = fs.getFullPath(ServerConstants.getTablesDirs(), file);
+        Path path = fs.getFullPath(ServerConstants.getTablesDirs(), file);
         org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
-        FileSKVIterator reader = FileOperations.getInstance().openReader(file, false, ns, ns.getConf(), conf.getTableConfiguration(table.toString()),
+        //log.debug("Opening "+file + " path " + path);
+        FileSKVIterator reader = FileOperations.getInstance().openReader(path.toString(), false, ns, ns.getConf(), conf.getTableConfiguration(table.toString()),
             dataCache, indexCache);
         reservedFiles.add(reader);
         readersReserved.put(reader, file);

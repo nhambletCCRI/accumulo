@@ -178,34 +178,9 @@ public class Constants {
     return conf.get(Property.INSTANCE_DFS_DIR);
   }
   
-  public static String getTablesDir(final AccumuloConfiguration conf) {
-    return getBaseDir(conf) + "/tables";
-  }
-  
-  public static String getRecoveryDir(final AccumuloConfiguration conf) {
-    return getBaseDir(conf) + "/recovery";
-  }
-  
   public static Path getDataVersionLocation(final AccumuloConfiguration conf) {
     return new Path(getBaseDir(conf) + "/version");
   }
   
-  public static String getMetadataTableDir(final AccumuloConfiguration conf) {
-    return getTablesDir(conf) + "/" + METADATA_TABLE_ID;
-  }
-  
-  public static String getRootTabletDir(final AccumuloConfiguration conf) {
-    return getMetadataTableDir(conf) + ZROOT_TABLET;
-  }
-
-  
-  /**
-   * @param conf
-   * @return The write-ahead log directory.
-   */
-  public static String getWalDirectory(final AccumuloConfiguration conf) {
-    return getBaseDir(conf) + "/wal";
-  }
-
-    public static final String AUDITLOG = "Audit";
+  public static final String AUDITLOG = "Audit";
 }

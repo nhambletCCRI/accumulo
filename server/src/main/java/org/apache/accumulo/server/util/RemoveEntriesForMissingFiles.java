@@ -66,7 +66,7 @@ public class RemoveEntriesForMissingFiles {
     for (Entry<Key,Value> entry : metadata) {
       count++;
       Key key = entry.getKey();
-      Path map = new Path(fs.getFullPath(key));
+      Path map = fs.getFullPath(key);
       if (!fs.exists(map)) {
         missing++;
         log.info("File " + map + " is missing");

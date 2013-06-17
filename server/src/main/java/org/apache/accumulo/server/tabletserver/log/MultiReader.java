@@ -86,9 +86,9 @@ public class MultiReader {
   
   private PriorityBuffer heap = new PriorityBuffer();
   
-  public MultiReader(FileSystem fs, String directory) throws IOException {
+  public MultiReader(FileSystem fs, Path directory) throws IOException {
     boolean foundFinish = false;
-    for (FileStatus child : fs.listStatus(new Path(directory))) {
+    for (FileStatus child : fs.listStatus(directory)) {
       if (child.getPath().getName().startsWith("_"))
         continue;
       if (child.getPath().getName().equals("finished")) {

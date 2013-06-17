@@ -32,6 +32,7 @@ import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.accumulo.server.logger.LogFileKey;
 import org.apache.accumulo.server.logger.LogFileValue;
+import org.apache.hadoop.fs.Path;
 import org.apache.log4j.Logger;
 
 /**
@@ -88,11 +89,11 @@ public class SortedLogRecovery {
     }
   }
   
-  public void recover(KeyExtent extent, List<String> recoveryLogs, Set<String> tabletFiles, MutationReceiver mr) throws IOException {
+  public void recover(KeyExtent extent, List<Path> recoveryLogs, Set<String> tabletFiles, MutationReceiver mr) throws IOException {
     int[] tids = new int[recoveryLogs.size()];
     LastStartToFinish lastStartToFinish = new LastStartToFinish();
     for (int i = 0; i < recoveryLogs.size(); i++) {
-      String logfile = recoveryLogs.get(i);
+      Path logfile = recoveryLogs.get(i);
       log.info("Looking at mutations from " + logfile + " for " + extent);
       MultiReader reader = new MultiReader(fs, logfile);
       try {
@@ -119,7 +120,7 @@ public class SortedLogRecovery {
       throw new RuntimeException("COMPACTION_FINISH (without preceding COMPACTION_START) not followed by successful minor compaction");
     
     for (int i = 0; i < recoveryLogs.size(); i++) {
-      String logfile = recoveryLogs.get(i);
+      Path logfile = recoveryLogs.get(i);
       MultiReader reader = new MultiReader(fs, logfile);
       try {
         playbackMutations(reader, tids[i], lastStartToFinish, mr);
@@ -188,6 +189,7 @@ public class SortedLogRecovery {
         lastStartToFinish.update(fileno, key.seq);
         
         // Tablet server finished the minor compaction, but didn't remove the entry from the METADATA table.
+        log.error("filename in compaction start " + key.filename);
         if (tabletFiles.contains(key.filename))
           lastStartToFinish.update(-1);
       } else if (key.event == COMPACTION_FINISH) {

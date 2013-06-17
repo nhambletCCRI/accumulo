@@ -503,6 +503,7 @@ public class Initialize {
       SecurityUtil.serverLogin();
       Configuration conf = CachedConfiguration.getInstance();
       
+      @SuppressWarnings("deprecation")
       FileSystem fs = FileSystemImpl.get(SiteConfiguration.getSiteConfiguration());
       
       if (opts.resetSecurity) {

@@ -32,7 +32,7 @@ public class FileRef implements Comparable<FileRef> {
   
   public FileRef(FileSystem fs, Key key) {
     metaReference = key.getColumnQualifier().toString();
-    fullReference = new Path(fs.getFullPath(key));
+    fullReference = fs.getFullPath(key);
   }
   
   public FileRef(String metaReference, Path fullReference) {

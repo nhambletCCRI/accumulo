@@ -40,6 +40,7 @@ import org.apache.accumulo.server.tabletserver.Tablet.CommitSession;
 import org.apache.accumulo.server.tabletserver.TabletMutations;
 import org.apache.accumulo.server.tabletserver.TabletServer;
 import org.apache.accumulo.server.tabletserver.log.DfsLogger.LoggerOperation;
+import org.apache.hadoop.fs.Path;
 import org.apache.log4j.Logger;
 
 /**
@@ -414,7 +415,7 @@ public class TabletServerLogger {
     return seq;
   }
   
-  public void recover(FileSystem fs, Tablet tablet, List<String> logs, Set<String> tabletFiles, MutationReceiver mr) throws IOException {
+  public void recover(FileSystem fs, Tablet tablet, List<Path> logs, Set<String> tabletFiles, MutationReceiver mr) throws IOException {
     if (!enabled(tablet))
       return;
     try {

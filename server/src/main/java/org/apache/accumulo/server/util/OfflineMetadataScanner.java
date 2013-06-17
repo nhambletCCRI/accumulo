@@ -151,7 +151,7 @@ public class OfflineMetadataScanner extends ScannerOptions implements Scanner {
     
     while (ssi.hasTop()) {
       if (ssi.getTopKey().compareColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY) == 0) {
-        allFiles.add(fs.getFullPath(ssi.getTopKey()));
+        allFiles.add(fs.getFullPath(ssi.getTopKey()).toString());
       } else {
         walogs++;
       }

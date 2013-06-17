@@ -74,21 +74,24 @@ public class LogSorter {
     
     @Override
     public void process(String child, byte[] data) {
-      String dest = Constants.getRecoveryDir(conf) + "/" + child;
-      String src = new String(data);
-      String name = new Path(src).getName();
+      String work = new String(data);
+      String[] parts = work.split("\\|");
+      String src = parts[0];
+      String dest = parts[1];
+      String sortId = new Path(src).getName();
+      log.debug("Sorting " + src + " to " + dest + " using sortId " + sortId);
       
       synchronized (currentWork) {
-        if (currentWork.containsKey(name))
+        if (currentWork.containsKey(sortId))
           return;
-        currentWork.put(name, this);
+        currentWork.put(sortId, this);
       }
       
       try {
         log.info("Copying " + src + " to " + dest);
-        sort(name, new Path(src), dest);
+        sort(sortId, new Path(src), dest);
       } finally {
-        currentWork.remove(name);
+        currentWork.remove(sortId);
       }
       
     }

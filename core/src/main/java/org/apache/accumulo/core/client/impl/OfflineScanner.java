@@ -229,14 +229,20 @@ class OfflineIterator implements Iterator<Entry<Key,Value>> {
     
     if (currentExtent != null && !extent.isPreviousExtent(currentExtent))
       throw new AccumuloException(" " + currentExtent + " is not previous extent " + extent);
-    
-    String tablesDir = Constants.getTablesDir(instance.getConfiguration());
+
+    // TODO: ACCUMULO-118 needs fullpaths
     List<String> absFiles = new ArrayList<String>();
     for (String relPath : relFiles) {
-      if (relPath.startsWith(".."))
-        absFiles.add(tablesDir + relPath.substring(2));
-      else
-        absFiles.add(tablesDir + "/" + tableId + relPath);
+      if (relFiles.contains(":")) {
+        absFiles.add(relPath);
+      } else {
+        throw new RuntimeException("Unimplemented: offline scanner over relative paths");
+//        if (relPath.startsWith("..")) {
+//          absFiles.add(fs.getFullPath(tablesDir + relPath.substring(2));
+//        } else {
+//          absFiles.add(tablesDir + "/" + tableId + relPath);
+//        }
+      }
     }
     
     iter = createIterator(extent, absFiles);

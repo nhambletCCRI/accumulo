@@ -95,7 +95,7 @@ public class MultiReaderTest {
   
   @Test
   public void testMultiReader() throws IOException {
-    String manyMaps = new Path("file://" + root.getRoot().getAbsolutePath() + "/manyMaps").toString();
+    Path manyMaps = new Path("file://" + root.getRoot().getAbsolutePath() + "/manyMaps");
     MultiReader reader = new MultiReader(fs, manyMaps);
     IntWritable key = new IntWritable();
     BytesWritable value = new BytesWritable();

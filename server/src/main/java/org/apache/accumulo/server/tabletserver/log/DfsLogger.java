@@ -31,18 +31,19 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.util.Daemon;
 import org.apache.accumulo.core.util.StringUtil;
+import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.accumulo.server.logger.LogFileKey;
 import org.apache.accumulo.server.logger.LogFileValue;
@@ -211,10 +212,10 @@ public class DfsLogger {
     this.conf = conf;
   }
   
-  public DfsLogger(ServerResources conf, String logger, String filename) throws IOException {
+  public DfsLogger(ServerResources conf, String logger, Path filename) throws IOException {
     this.conf = conf;
     this.logger = logger;
-    this.logPath = new Path(Constants.getWalDirectory(conf.getConfiguration()), filename);
+    this.logPath = filename;
   }
   
   public static FSDataInputStream readHeader(FileSystem fs, Path path, Map<String,String> opts) throws IOException {
@@ -241,13 +242,17 @@ public class DfsLogger {
     }
   }
   
+  // TODO: ACCUMULO-118
+  static final Random random = new Random();
+  
   public synchronized void open(String address) throws IOException {
     String filename = UUID.randomUUID().toString();
     logger = StringUtil.join(Arrays.asList(address.split(":")), "+");
     
     log.debug("DfsLogger.open() begin");
+    String[] wals = ServerConstants.getWalDirs();
     
-    logPath = new Path(Constants.getWalDirectory(conf.getConfiguration()) + "/" + logger + "/" + filename);
+    logPath = new Path(wals[random.nextInt(wals.length)] + "/" + logger + "/" + filename);
     try {
       FileSystem fs = conf.getFileSystem();
       short replication = (short) conf.getConfiguration().getCount(Property.TSERV_WAL_REPLICATION);
@@ -334,7 +339,7 @@ public class DfsLogger {
   }
   
   public String getFileName() {
-    return logPath.getName();
+    return logPath.toString();
   }
   
   public void close() throws IOException {

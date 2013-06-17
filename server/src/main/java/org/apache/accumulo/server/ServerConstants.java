@@ -16,23 +16,31 @@
  */
 package org.apache.accumulo.server;
 
+import static org.apache.accumulo.core.Constants.METADATA_TABLE_ID;
+import static org.apache.accumulo.core.Constants.ZROOT_TABLET;
+
 import org.apache.accumulo.core.conf.Property;
+import org.apache.accumulo.core.util.CachedConfiguration;
 import org.apache.accumulo.server.conf.ServerConfiguration;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 
-import static org.apache.accumulo.core.Constants.*;
-
 public class ServerConstants {
+
   // these are functions to delay loading the Accumulo configuration unless we must
   public static String[] getBaseDirs() {
     String singleNamespace = ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_DIR);
     String ns = ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_NAMESPACES);
-    if (ns == null) {
-      return new String[] { singleNamespace };
+    if (ns == null || ns.isEmpty()) {
+      Configuration hadoopConfig = CachedConfiguration.getInstance();
+      String fullPath = hadoopConfig.get("fs.default.name") + singleNamespace;
+      return new String[] { fullPath };
     }
     String namespaces[] = ns.split(",");
     if (namespaces.length < 2) {
-      return new String[] { singleNamespace };
+      Configuration hadoopConfig = CachedConfiguration.getInstance();
+      String fullPath = hadoopConfig.get("fs.default.name") + singleNamespace;
+      return new String[] { fullPath };
     }
     return prefix(namespaces, singleNamespace);
   }
@@ -53,6 +61,14 @@ public class ServerConstants {
     return prefix(getBaseDirs(), "recovery");
   }
   
+  public static String[] getWalDirs() {
+    return prefix(getBaseDirs(), "wal");
+  }
+  
+  public static String[] getWalogArchives() {
+    return prefix(getBaseDirs(), "walogArchive");
+  }
+  
   public static Path getInstanceIdLocation() {
     return new Path(ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_DIR) + "/instance_id");
   }
@@ -68,5 +84,5 @@ public class ServerConstants {
   public static String getRootTabletDir() {
     return prefix(getMetadataTableDirs(), ZROOT_TABLET)[0];
   }
-  
+
 }

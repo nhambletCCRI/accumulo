@@ -113,7 +113,7 @@ public class LogReader {
         }
       } else {
         // read the log entries sorted in a map file
-        MultiReader input = new MultiReader(fs, file);
+        MultiReader input = new MultiReader(fs, path);
         while (input.next(key, value)) {
           printLogEvent(key, value, row, rowMatcher, ke, tabletIds, opts.maxMutations);
         }

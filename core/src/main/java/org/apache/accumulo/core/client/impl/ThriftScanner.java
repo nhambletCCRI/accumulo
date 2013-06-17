@@ -437,6 +437,8 @@ public class ThriftScanner {
       List<KeyValue> results = new ArrayList<KeyValue>(sr.results.size());
       for (TKeyValue tkv : sr.results)
         results.add(new KeyValue(new Key(tkv.key), tkv.value));
+      for (KeyValue r : results)
+        log.trace("Got result " + r);
       
       return results;
       

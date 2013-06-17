@@ -61,7 +61,7 @@ public class LocalityCheck {
         files.clear();
       } else if (key.compareColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY) == 0) {
         
-        files.add(fs.getFullPath(key));
+        files.add(fs.getFullPath(key).toString());
       }
     }
     System.out.println(" Server         %local  total blocks");

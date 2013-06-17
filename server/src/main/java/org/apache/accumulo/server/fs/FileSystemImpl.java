@@ -23,15 +23,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.conf.DefaultConfiguration;
+import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.util.CachedConfiguration;
+import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.commons.lang.NotImplementedException;
@@ -307,9 +309,24 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
     AccumuloConfiguration conf = ServerConfiguration.getSystemConfiguration(HdfsZooInstance.getInstance());
     return get(conf);
   }
+  
+  static private final String DEFAULT = "";
 
   public static org.apache.accumulo.server.fs.FileSystem get(AccumuloConfiguration conf) throws IOException {
-    return new FileSystemImpl(Collections.singletonMap("", FileSystem.get(CachedConfiguration.getInstance())), "", conf);
+    Map<String, FileSystem> fileSystems = new HashMap<String, FileSystem>();
+    Configuration hadoopConf = CachedConfiguration.getInstance();
+    fileSystems.put(DEFAULT, FileSystem.get(hadoopConf));
+    String ns = ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_NAMESPACES);
+    if (ns != null) {
+      for (String space : ns.split(",")) {
+        if (space.contains(":")) {
+          fileSystems.put(space, new Path(space).getFileSystem(hadoopConf));
+        } else {
+          fileSystems.put(space, FileSystem.get(hadoopConf));
+        }
+      }
+    }
+    return new FileSystemImpl(fileSystems, "", conf);
   }
 
   @Override
@@ -364,11 +381,11 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
   }
   
   @Override
-  public String getFullPath(Key key) {
+  public Path getFullPath(Key key) {
     
     String relPath = key.getColumnQualifierData().toString();
     if (relPath.contains(":"))
-      return relPath;
+      return new Path(relPath);
    
     byte [] tableId = KeyExtent.tableOfMetadataRow(key.getRow());
     
@@ -376,10 +393,9 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
       relPath = relPath.substring(2);
     else
       relPath = "/" + new String(tableId) + relPath;
-    String fullPath = Constants.getTablesDir(conf) + relPath;
+    String fullPath = ServerConstants.getTablesDirs()[0] + relPath;
     FileSystem ns = getFileSystemByPath(fullPath);
-    String result = ns.makeQualified(new Path(fullPath)).toString();
-    return result;
+    return ns.makeQualified(new Path(fullPath));
   }
 
   @Override
@@ -404,20 +420,26 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
   }
 
   @Override
-  public String getFullPath(String[] paths, String fileName) throws IOException {
+  public Path getFullPath(String[] paths, String fileName) throws IOException {
     if (fileName.contains(":"))
-      return fileName;
+      return new Path(fileName);
+    // TODO: ACCUMULO-118
+    // How do we want it to work?  Find it somewhere? or find it in the default file system?
     // old-style name, on one of many possible "root" paths:
     if (fileName.startsWith("../"))
       fileName = fileName.substring(2);
     for (String path : paths) {
-      String fullPath = path + fileName;
+      String fullPath;
+      if (path.endsWith("/") || fileName.startsWith("/"))
+        fullPath = path + fileName;
+      else
+        fullPath = path + "/" + fileName;
       FileSystem ns = getFileSystemByPath(fullPath);
       Path exists = new Path(fullPath);
       if (ns.exists(exists))
-        return ns.makeQualified(exists).toString();
+        return ns.makeQualified(exists);
     }
-    throw new RuntimeException("Could not find file " + fileName + " in " + Arrays.asList(paths));
+    throw new IOException("Could not find file " + fileName + " in " + Arrays.asList(paths));
   }
 
   @Override
