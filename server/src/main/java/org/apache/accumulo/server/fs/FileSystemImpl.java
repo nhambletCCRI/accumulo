@@ -436,8 +436,11 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
         fullPath = path + "/" + fileName;
       FileSystem ns = getFileSystemByPath(fullPath);
       Path exists = new Path(fullPath);
-      if (ns.exists(exists))
+      if (ns.exists(exists)) {
+        Path result = ns.makeQualified(exists);
+        log.debug("Found " + exists + " on " + path + " as " + result);
         return ns.makeQualified(exists);
+      }
     }
     throw new IOException("Could not find file " + fileName + " in " + Arrays.asList(paths));
   }

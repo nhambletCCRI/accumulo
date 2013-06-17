@@ -20,13 +20,13 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 import org.apache.accumulo.core.client.admin.TimeType;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
@@ -87,7 +87,7 @@ public class MockTable {
   final Map<String,String> settings;
   Map<String,EnumSet<TablePermission>> userPermissions = new HashMap<String,EnumSet<TablePermission>>();
   private TimeType timeType;
-  SortedSet<Text> splits = new TreeSet<Text>();
+  SortedSet<Text> splits = new ConcurrentSkipListSet<Text>();
   Map<String,Set<Text>> localityGroups = new TreeMap<String, Set<Text>>();
   
   MockTable(boolean limitVersion, TimeType timeType) {
@@ -101,6 +101,8 @@ public class MockTable {
   }
   
   synchronized void addMutation(Mutation m) {
+    if (m.size() == 0)
+      throw new IllegalArgumentException("Can not add empty mutations");
     long now = System.currentTimeMillis();
     mutationCount++;
     for (ColumnUpdate u : m.getUpdates()) {

@@ -26,17 +26,26 @@
   <packaging>pom</packaging>
   <name>Assemblies</name>
   <properties>
+    <DEV_ACCUMULO_HOME>${project.build.directory}</DEV_ACCUMULO_HOME>
     <accumulo-top>..</accumulo-top>
   </properties>
   <dependencies>
-    <!--
-       NOTE: These dependency declarations are required to sort
-       this project to the end of the line in the multimodule
-       build.
-       Further, the dependencies for Accumulo artifacts must be
-       here so they will be copied into the lib directory for
-       the binary distribution assemblies.
-    -->
+    <dependency>
+      <groupId>com.beust</groupId>
+      <artifactId>jcommander</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>jline</groupId>
+      <artifactId>jline</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.accumulo</groupId>
       <artifactId>accumulo-core</artifactId>
@@ -74,41 +83,14 @@
       <artifactId>accumulo-trace</artifactId>
     </dependency>
     <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <scope>provided</scope>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-vfs2</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
-      <scope>provided</scope>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
     </dependency>
   </dependencies>
-  <build>
-    <plugins>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>config-webpage</id>
-            <goals>
-              <goal>java</goal>
-            </goals>
-            <phase>prepare-package</phase>
-            <configuration>
-              <mainClass>org.apache.accumulo.core.conf.DefaultConfiguration</mainClass>
-              <classpathScope>compile</classpathScope>
-              <arguments>
-                <argument>--generate-doc</argument>
-                <argument>${project.build.directory}/../../docs/config.html</argument>
-              </arguments>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
-  </build>
   <profiles>
     <profile>
       <id>apache-release</id>
@@ -157,6 +139,41 @@
                   <finalName>${project.artifactId}-${project.version}</finalName>
                   <descriptors>
                     <descriptor>src/main/assemblies/binary-release.xml</descriptor>
+                  </descriptors>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>make-accumulo-home</id>
+      <activation>
+        <!-- always activate, unless explicitly de-activated -->
+        <file>
+          <exists>pom.xml</exists>
+        </file>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-assembly-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>directory-assembly</id>
+                <goals>
+                  <goal>single</goal>
+                </goals>
+                <phase>package</phase>
+                <configuration>
+                  <outputDirectory>${DEV_ACCUMULO_HOME}</outputDirectory>
+                  <formats>
+                    <format>dir</format>
+                  </formats>
+                  <descriptors>
+                    <descriptor>src/main/assemblies/dev-directory.xml</descriptor>
                   </descriptors>
                 </configuration>
               </execution>
@@ -633,17 +650,6 @@
           </plugin>
         </plugins>
       </build>
-    </profile>
-    <profile>
-      <id>docs</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.accumulo</groupId>
-          <artifactId>accumulo-docs</artifactId>
-          <classifier>user-manual</classifier>
-          <type>pdf</type>
-        </dependency>
-      </dependencies>
     </profile>
   </profiles>
 </project>

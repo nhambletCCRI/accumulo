@@ -882,7 +882,8 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
         Map<FileRef, MapFileInfo> fileRefMap = new HashMap<FileRef, MapFileInfo>();
         for (Entry<String,MapFileInfo> mapping : fileMap.entrySet()) {
           org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(mapping.getKey());
-          fileRefMap.put(new FileRef(mapping.getKey(), ns.makeQualified(new Path(mapping.getKey()))), mapping.getValue());
+          Path path = ns.makeQualified(new Path(mapping.getKey()));
+          fileRefMap.put(new FileRef(path.toString(), path), mapping.getValue());
         }
         
         Tablet importTablet = onlineTablets.get(new KeyExtent(tke));
@@ -1271,7 +1272,8 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
         } else if (keyExtent.isRootTablet()) {
           throw new IllegalArgumentException("Cannot batch query root tablet with other tablets " + threadPoolExtent + " " + keyExtent);
         } else if (keyExtent.isMeta() && !threadPoolExtent.isMeta()) {
-          throw new IllegalArgumentException("Cannot batch query !METADATA and non !METADATA tablets " + threadPoolExtent + " " + keyExtent);
+          throw new IllegalArgumentException("Cannot batch query " + Constants.METADATA_TABLE_NAME + " and non " + Constants.METADATA_TABLE_NAME + " tablets "
+              + threadPoolExtent + " " + keyExtent);
         }
         
       }
@@ -2044,12 +2046,6 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
       
     }
     
-    /*
-     * (non-Javadoc)
-     * 
-     * @see org.apache.accumulo.core.tabletserver.thrift.TabletClientService.Iface#removeLogs(org.apache.accumulo.trace.thrift.TInfo,
-     * org.apache.accumulo.core.security.thrift.Credentials, java.util.List)
-     */
     @Override
     public void removeLogs(TInfo tinfo, TCredentials credentials, List<String> filenames) throws TException {
       String myname = getClientAddressString();
@@ -2104,7 +2100,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
         }
       }
     }
-        
+    
     @Override
     public List<ActiveCompaction> getActiveCompactions(TInfo tinfo, TCredentials credentials) throws ThriftSecurityException, TException {
       try {
@@ -2634,8 +2630,8 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
       if (address == null) {
         return null;
       }
-      MasterClientService.Client client = ThriftUtil.getClient(new MasterClientService.Client.Factory(), address,
-          Property.GENERAL_RPC_TIMEOUT, getSystemConfiguration());
+      MasterClientService.Client client = ThriftUtil.getClient(new MasterClientService.Client.Factory(), address, Property.GENERAL_RPC_TIMEOUT,
+          getSystemConfiguration());
       // log.info("Listener API to master has been opened");
       return client;
     } catch (Exception e) {
@@ -2889,7 +2885,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
         Constants.METADATA_SPLIT_RATIO_COLUMN, Constants.METADATA_OLD_PREV_ROW_COLUMN, Constants.METADATA_TIME_COLUMN});
     
     ScannerImpl scanner = new ScannerImpl(HdfsZooInstance.getInstance(), SecurityConstants.getSystemCredentials(), Constants.METADATA_TABLE_ID,
-        Constants.NO_AUTHS);
+        Authorizations.EMPTY);
     scanner.setRange(extent.toMetadataRange());
     
     TreeMap<Key,Value> tkv = new TreeMap<Key,Value>();

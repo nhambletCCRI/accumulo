@@ -27,6 +27,7 @@ import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Value;
+import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.server.cli.ClientOpts;
 import org.apache.accumulo.server.fs.FileSystem;
 import org.apache.accumulo.server.fs.FileSystemImpl;
@@ -42,7 +43,7 @@ public class LocalityCheck {
     
     FileSystem fs = FileSystemImpl.get();
     Connector connector = opts.getConnector();
-    Scanner scanner = connector.createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS);
+    Scanner scanner = connector.createScanner(Constants.METADATA_TABLE_NAME, Authorizations.EMPTY);
     scanner.fetchColumnFamily(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY);
     scanner.fetchColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY);
     scanner.setRange(Constants.METADATA_KEYSPACE);

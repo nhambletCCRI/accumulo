@@ -40,6 +40,7 @@ import org.apache.accumulo.core.conf.DefaultConfiguration;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Value;
+import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.core.util.NumUtil;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.cli.ClientOpts;
@@ -152,7 +153,7 @@ public class TableDiskUsage {
     for (String tableId : tableIds) {
       Scanner mdScanner = null;
       try {
-        mdScanner = conn.createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS);
+        mdScanner = conn.createScanner(Constants.METADATA_TABLE_NAME, Authorizations.EMPTY);
       } catch (TableNotFoundException e) {
         throw new RuntimeException(e);
       }

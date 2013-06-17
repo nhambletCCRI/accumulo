@@ -31,6 +31,7 @@ import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.Value;
+import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.core.security.CredentialHelper;
 import org.apache.accumulo.core.tabletserver.thrift.ConstraintViolationException;
 import org.apache.accumulo.server.cli.ClientOpts;
@@ -105,7 +106,7 @@ public class CheckForMetadataProblems {
     if (opts.offline) {
       scanner = new OfflineMetadataScanner(ServerConfiguration.getSystemConfiguration(opts.getInstance()), fs);
     } else {
-      scanner =  opts.getConnector().createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS);
+      scanner = opts.getConnector().createScanner(Constants.METADATA_TABLE_NAME, Authorizations.EMPTY);
     }
     
     scanner.setRange(Constants.METADATA_KEYSPACE);
@@ -180,13 +181,12 @@ public class CheckForMetadataProblems {
   }
   
   static class Opts extends ClientOpts {
-    @Parameter(names="--fix", description="best-effort attempt to fix problems found")
+    @Parameter(names = "--fix", description = "best-effort attempt to fix problems found")
     boolean fix = false;
     
-    @Parameter(names="--offline", description="perform the check on the files directly")
+    @Parameter(names = "--offline", description = "perform the check on the files directly")
     boolean offline = false;
   }
-  
   
   public static void main(String[] args) throws Exception {
     Opts opts = new Opts();

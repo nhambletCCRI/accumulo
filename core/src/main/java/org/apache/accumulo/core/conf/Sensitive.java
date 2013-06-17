@@ -14,38 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.accumulo.test.functional;
+package org.apache.accumulo.core.conf;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.lang.annotation.Inherited;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
-import org.apache.accumulo.core.client.Connector;
-import org.apache.accumulo.core.security.Authorizations;
-
-public class CreateManyScannersTest extends FunctionalTest {
-  
-  @Override
-  public void cleanup() throws Exception {
-    
-  }
-  
-  @Override
-  public Map<String,String> getInitialConfig() {
-    return Collections.emptyMap();
-  }
-  
-  @Override
-  public List<TableSetup> getTablesToCreate() {
-    return Collections.singletonList(new TableSetup("mscant"));
-  }
-  
-  @Override
-  public void run() throws Exception {
-    Connector connector = getConnector();
-    for (int i = 0; i < 100000; i++) {
-      connector.createScanner("mscant", Authorizations.EMPTY);
-    }
-  }
+/**
+ * An annotation to denote {@link AccumuloConfiguration} {@link Property} keys which are sensitive, and should be masked or hidden when printed.
+ */
+@Inherited
+@Retention(RetentionPolicy.RUNTIME)
+@interface Sensitive {
   
 }

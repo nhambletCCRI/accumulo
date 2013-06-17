@@ -21,7 +21,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.accumulo.core.Constants;
-import org.apache.accumulo.server.cli.ClientOpts;
 import org.apache.accumulo.core.cli.BatchWriterOpts;
 import org.apache.accumulo.core.client.MultiTableBatchWriter;
 import org.apache.accumulo.core.client.Scanner;
@@ -31,7 +30,9 @@ import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.PartialKey;
 import org.apache.accumulo.core.data.Range;
 import org.apache.accumulo.core.data.Value;
+import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.server.ServerConstants;
+import org.apache.accumulo.server.cli.ClientOpts;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -46,17 +47,13 @@ public class AddFilesWithMissingEntries {
   static final Logger log = Logger.getLogger(AddFilesWithMissingEntries.class);
   
   public static class Opts extends ClientOpts {
-    @Parameter(names="-update", description="Make changes to the !METADATA table to include missing files")
+    @Parameter(names = "-update", description = "Make changes to the " + Constants.METADATA_TABLE_NAME + " table to include missing files")
     boolean update = false;
   }
   
-  
   /**
-   * A utility to add files to the !METADATA table that are not listed in the root tablet.  
-   * This is a recovery tool for someone who knows what they are doing.  It might be better to 
-   * save off files, and recover your instance by re-initializing and importing the existing files.
-   *  
-   * @param args
+   * A utility to add files to the {@value Constants#METADATA_TABLE_NAME} table that are not listed in the root tablet. This is a recovery tool for someone who
+   * knows what they are doing. It might be better to save off files, and recover your instance by re-initializing and importing the existing files.
    */
   public static void main(String[] args) throws Exception {
     Opts opts = new Opts();
@@ -65,7 +62,7 @@ public class AddFilesWithMissingEntries {
     
     final Key rootTableEnd = new Key(Constants.ROOT_TABLET_EXTENT.getEndRow());
     final Range range = new Range(rootTableEnd.followingKey(PartialKey.ROW), true, Constants.METADATA_RESERVED_KEYSPACE_START_KEY, false);
-    final Scanner scanner = opts.getConnector().createScanner(Constants.METADATA_TABLE_NAME, Constants.NO_AUTHS);
+    final Scanner scanner = opts.getConnector().createScanner(Constants.METADATA_TABLE_NAME, Authorizations.EMPTY);
     scanner.setRange(range);
     final Configuration conf = new Configuration();
     final FileSystem fs = FileSystem.get(conf);
@@ -108,7 +105,8 @@ public class AddFilesWithMissingEntries {
     writer.close();
   }
   
-  private static int addUnknownFiles(FileSystem fs, String directory, Set<String> knownFiles, KeyExtent ke, MultiTableBatchWriter writer, boolean update) throws Exception {
+  private static int addUnknownFiles(FileSystem fs, String directory, Set<String> knownFiles, KeyExtent ke, MultiTableBatchWriter writer, boolean update)
+      throws Exception {
     int count = 0;
     final String tableId = ke.getTableId().toString();
     final Text row = ke.getMetadataEntry();

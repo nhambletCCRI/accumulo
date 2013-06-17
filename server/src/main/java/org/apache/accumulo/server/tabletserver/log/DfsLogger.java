@@ -175,11 +175,6 @@ public class DfsLogger {
     }
   }
   
-  /*
-   * (non-Javadoc)
-   * 
-   * @see org.apache.accumulo.server.tabletserver.log.IRemoteLogger#equals(java.lang.Object)
-   */
   @Override
   public boolean equals(Object obj) {
     // filename is unique
@@ -190,11 +185,6 @@ public class DfsLogger {
     return false;
   }
   
-  /*
-   * (non-Javadoc)
-   * 
-   * @see org.apache.accumulo.server.tabletserver.log.IRemoteLogger#hashCode()
-   */
   @Override
   public int hashCode() {
     // filename is unique
@@ -267,17 +257,23 @@ public class DfsLogger {
         logFile = fs.create(logPath, true, 0, replication, blockSize);
       
       try {
-        // sync: send data to datanodes
-        sync = logFile.getClass().getMethod("sync");
+        NoSuchMethodException e = null;
         try {
-          // hsych: send data to datanodes and sync the data to disk
-          sync = logFile.getClass().getMethod("hsync");
+          // sync: send data to datanodes
+          sync = logFile.getClass().getMethod("sync");
         } catch (NoSuchMethodException ex) {
+          e = ex;
         }
+        try {
+          // hsync: send data to datanodes and sync the data to disk
+          sync = logFile.getClass().getMethod("hsync");
+          e = null;
+        } catch (NoSuchMethodException ex) {}
+        if (e != null)
+          throw new RuntimeException(e);
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
-      
       
       // Initialize the crypto operations.
       @SuppressWarnings("deprecation")
@@ -310,13 +306,13 @@ public class DfsLogger {
       key.tserverSession = filename;
       key.filename = filename;
       write(key, EMPTY);
-      logFile.sync();
+      sync.invoke(logFile);
       log.debug("Got new write-ahead log: " + this);
-    } catch (IOException ex) {
+    } catch (Exception ex) {
       if (logFile != null)
         logFile.close();
       logFile = null;
-      throw ex;
+      throw new IOException(ex);
     }
     
     Thread t = new Daemon(new LogSyncingTask());
@@ -324,11 +320,6 @@ public class DfsLogger {
     t.start();
   }
   
-  /*
-   * (non-Javadoc)
-   * 
-   * @see org.apache.accumulo.server.tabletserver.log.IRemoteLogger#toString()
-   */
   @Override
   public String toString() {
     return getLogger() + "/" + getFileName();
@@ -380,10 +371,10 @@ public class DfsLogger {
     key.tablet = tablet;
     try {
       write(key, EMPTY);
-      logFile.sync();
-    } catch (IOException ex) {
+      sync.invoke(logFile);
+    } catch (Exception ex) {
       log.error(ex);
-      throw ex;
+      throw new IOException(ex);
     }
   }
   
