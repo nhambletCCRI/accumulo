@@ -23,7 +23,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -119,10 +118,9 @@ public class RecoveryManager {
     log.info("Created zookeeper entry " + path + " with data " + work);
   }
   
-  Random random = new Random();
-  
   public boolean recoverLogs(KeyExtent extent, Collection<Collection<String>> walogs) throws IOException {
     boolean recoveryNeeded = false;
+    ;
     for (Collection<String> logs : walogs) {
       for (String walog : logs) {
         String hostFilename[] = walog.split("/", 2);
@@ -131,10 +129,8 @@ public class RecoveryManager {
         String parts[] = filename.split("/");
         String sortId = parts[parts.length - 1];
         // TODO: ACCUMULO-118: choose recovery directory with extension
-        String[] dirs = ServerConstants.getRecoveryDirs();
-        String recoveryDir = dirs[random.nextInt(dirs.length)];
-        String dest = recoveryDir + "/" + sortId;
-        log.debug("Recovering " + filename + " to " + dest + " using sortId " + sortId);
+        String dest = master.getFileSystem().choose(ServerConstants.getRecoveryDirs()) + "/" + sortId;
+        log.debug("Recovering " + filename + " to " + dest);
         
         boolean sortQueued;
         synchronized (this) {

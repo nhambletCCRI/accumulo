@@ -58,12 +58,18 @@ public class VolumeManagerImpl implements VolumeManager {
   Map<String, ? extends FileSystem> volumes;
   String defaultVolumes;
   AccumuloConfiguration conf;
+  VolumeChooser chooser;
   
   protected VolumeManagerImpl(Map<String, ? extends FileSystem> volumes, String defaultVolume, AccumuloConfiguration conf) {
     this.volumes = volumes;
     this.defaultVolumes = defaultVolume;
     this.conf = conf;
     ensureSyncIsEnabled();
+    try {
+      this.getClass().getClassLoader().loadClass(conf.get(Property.GENERAL_VOLUME_CHOOSER));
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException(e);
+    }
   }
   
   public static org.apache.accumulo.server.fs.VolumeManager getLocal() throws IOException {
@@ -448,6 +454,11 @@ public class VolumeManagerImpl implements VolumeManager {
   @Override
   public ContentSummary getContentSummary(Path dir) throws IOException {
     return getFileSystemByPath(dir).getContentSummary(dir);
+  }
+
+  @Override
+  public String choose(String[] options) {
+    return chooser.choose(options);
   }
 
 }

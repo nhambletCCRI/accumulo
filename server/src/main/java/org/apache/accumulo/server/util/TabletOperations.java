@@ -17,7 +17,6 @@
 package org.apache.accumulo.server.util;
 
 import java.io.IOException;
-import java.util.Random;
 
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.util.UtilWaitThread;
@@ -33,27 +32,23 @@ public class TabletOperations {
   
   private static final Logger log = Logger.getLogger(TabletOperations.class);
   
-  private static final Random random = new Random();
-  
-  // TODO ACCUMULO-118 make the namespace selection pluggable
   public static String createTabletDirectory(VolumeManager fs, String tableId, Text endRow) {
     String lowDirectory;
     
     UniqueNameAllocator namer = UniqueNameAllocator.getInstance();
-    String[] tablesDirs = ServerConstants.getTablesDirs();
-    String randomNamespace = tablesDirs[random.nextInt(tablesDirs.length)];
+    String volume = fs.choose(ServerConstants.getTablesDirs());
     
     while (true) {
       try {
         if (endRow == null) {
           lowDirectory = Constants.DEFAULT_TABLET_LOCATION;
-          Path lowDirectoryPath = new Path(randomNamespace + "/" + tableId + "/" + lowDirectory);
+          Path lowDirectoryPath = new Path(volume + "/" + tableId + "/" + lowDirectory);
           if (fs.exists(lowDirectoryPath) || fs.mkdirs(lowDirectoryPath))
             return lowDirectoryPath.makeQualified(fs.getFileSystemByPath(lowDirectoryPath)).toString();
           log.warn("Failed to create " + lowDirectoryPath + " for unknown reason");
         } else {
           lowDirectory = "/" + Constants.GENERATED_TABLET_DIRECTORY_PREFIX + namer.getNextName();
-          Path lowDirectoryPath = new Path(randomNamespace + "/" + tableId + "/" +  lowDirectory);
+          Path lowDirectoryPath = new Path(volume + "/" + tableId + "/" +  lowDirectory);
           if (fs.exists(lowDirectoryPath))
             throw new IllegalStateException("Dir exist when it should not " + lowDirectoryPath);
           if (fs.mkdirs(lowDirectoryPath))
@@ -63,7 +58,7 @@ public class TabletOperations {
         log.warn(e);
       }
       
-      log.warn("Failed to create dir for tablet in table " + tableId + " in namespace " + randomNamespace + " + will retry ...");
+      log.warn("Failed to create dir for tablet in table " + tableId + " in volume " + volume + " + will retry ...");
       UtilWaitThread.sleep(3000);
       
     }

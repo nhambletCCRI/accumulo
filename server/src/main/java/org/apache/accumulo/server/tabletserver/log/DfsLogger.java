@@ -31,7 +31,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -232,19 +231,15 @@ public class DfsLogger {
     }
   }
   
-  // TODO: ACCUMULO-118
-  static final Random random = new Random();
-  
   public synchronized void open(String address) throws IOException {
     String filename = UUID.randomUUID().toString();
     logger = StringUtil.join(Arrays.asList(address.split(":")), "+");
     
     log.debug("DfsLogger.open() begin");
-    String[] wals = ServerConstants.getWalDirs();
+    VolumeManager fs = conf.getFileSystem();
     
-    logPath = new Path(wals[random.nextInt(wals.length)] + "/" + logger + "/" + filename);
+    logPath = new Path(fs.choose(ServerConstants.getWalDirs()) + "/" + logger + "/" + filename);
     try {
-      VolumeManager fs = conf.getFileSystem();
       short replication = (short) conf.getConfiguration().getCount(Property.TSERV_WAL_REPLICATION);
       if (replication == 0)
         replication = fs.getDefaultReplication(logPath);

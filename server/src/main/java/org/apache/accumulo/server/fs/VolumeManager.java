@@ -117,4 +117,6 @@ public interface VolumeManager {
 
   // forward to the appropriate FileSystem object
   ContentSummary getContentSummary(Path dir) throws IOException;
+
+  String choose(String[] options);
 }
