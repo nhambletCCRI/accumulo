@@ -28,7 +28,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 /**
- * A wrapper around multiple hadoop FileSystem objects, which are assumed to be different namespaces.
+ * A wrapper around multiple hadoop FileSystem objects, which are assumed to be different volumes.
+ * This also concentrates a bunch of meta-operations like waiting for SAFE_MODE, and closing WALs.
  */
 public interface VolumeManager {
   
@@ -68,12 +69,10 @@ public interface VolumeManager {
   // find the appropriate FileSystem object given a path
   FileSystem getFileSystemByPath(Path path);
   
-  FileSystem getFileSystemByPath(String path);
-  
   // get a mapping of volume to FileSystem
   Map<String, ? extends FileSystem> getFileSystems();
   
-  // return the item in options that is in the same namespace as source
+  // return the item in options that is in the same volume as source
   Path matchingFileSystem(Path source, String[] options);
   
   // create a new path in the same volume as the sourceDir
@@ -88,7 +87,7 @@ public interface VolumeManager {
   // forward to the appropriate FileSystem object
   FSDataInputStream open(Path path) throws IOException;
   
-  // forward to the appropriate FileSystem object, throws an exception if the paths are in different namespaces
+  // forward to the appropriate FileSystem object, throws an exception if the paths are in different volumes
   boolean rename(Path path, Path newPath) throws IOException;
   
   // forward to the appropriate FileSystem object
@@ -118,5 +117,6 @@ public interface VolumeManager {
   // forward to the appropriate FileSystem object
   ContentSummary getContentSummary(Path dir) throws IOException;
 
+  // decide on which of the given locations to create a new file
   String choose(String[] options);
 }

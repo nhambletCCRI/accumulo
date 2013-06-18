@@ -650,10 +650,17 @@ public class Tablet {
       
       for (FileRef tpath : paths.keySet()) {
         
-        // TODO ACCUMULO-118
-//        if (!tpath.getParent().getParent().equals(new Path(ServerConstants.getTablesDir() + "/" + extent.getTableId()))) {
-//          throw new IOException("Map file " + tpath + " not in table dir " + ServerConstants.getTablesDir() + "/" + extent.getTableId());
-//        }
+        boolean inTheRightDirectory = false;
+        Path parent = tpath.path().getParent().getParent();
+        for (String tablesDir : ServerConstants.getTablesDirs()) {
+          if (parent.equals(new Path(tablesDir, extent.getTableId().toString()))) {
+            inTheRightDirectory = true;
+            break;
+          }
+        }
+        if (!inTheRightDirectory) {
+          throw new IOException("Map file " + tpath + " not in table dirs");
+        }
         
         if (bulkDir == null)
           bulkDir = tpath.path().getParent().toString();

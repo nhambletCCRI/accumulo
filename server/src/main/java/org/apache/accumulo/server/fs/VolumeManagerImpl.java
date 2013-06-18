@@ -260,11 +260,6 @@ public class VolumeManagerImpl implements VolumeManager {
   }
 
   @Override
-  public FileSystem getFileSystemByPath(String path) {
-    return getFileSystemByPath(new Path(path));
-  }
-
-  @Override
   public Map<String, ? extends FileSystem>  getFileSystems() {
     return volumes;
   }
@@ -399,9 +394,9 @@ public class VolumeManagerImpl implements VolumeManager {
       relPath = relPath.substring(2);
     else
       relPath = "/" + new String(tableId) + relPath;
-    String fullPath = ServerConstants.getTablesDirs()[0] + relPath;
+    Path fullPath = new Path(ServerConstants.getTablesDirs()[0] + relPath);
     FileSystem fs = getFileSystemByPath(fullPath);
-    return fs.makeQualified(new Path(fullPath));
+    return fs.makeQualified(fullPath);
   }
 
   @Override
@@ -440,8 +435,8 @@ public class VolumeManagerImpl implements VolumeManager {
         fullPath = path + fileName;
       else
         fullPath = path + "/" + fileName;
-      FileSystem ns = getFileSystemByPath(fullPath);
       Path exists = new Path(fullPath);
+      FileSystem ns = getFileSystemByPath(exists);
       if (ns.exists(exists)) {
         Path result = ns.makeQualified(exists);
         log.debug("Found " + exists + " on " + path + " as " + result);

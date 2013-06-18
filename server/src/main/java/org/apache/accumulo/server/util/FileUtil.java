@@ -121,11 +121,11 @@ public class FileUtil {
       
       start = end;
       
-      String newMapFile = String.format("%s/%04d." + RFile.EXTENSION, newDir, count++);
+      FileRef newMapFile = new FileRef(String.format("%s/%04d." + RFile.EXTENSION, newDir, count++));
       
-      outFiles.add(new FileRef(newMapFile));
-      FileSystem ns = fs.getFileSystemByPath(newMapFile);
-      FileSKVWriter writer = new RFileOperations().openWriter(newMapFile, ns, ns.getConf(), acuConf);
+      outFiles.add(newMapFile);
+      FileSystem ns = fs.getFileSystemByPath(newMapFile.path());
+      FileSKVWriter writer = new RFileOperations().openWriter(newMapFile.toString(), ns, ns.getConf(), acuConf);
       writer.startDefaultLocalityGroup();
       List<SortedKeyValueIterator<Key,Value>> iters = new ArrayList<SortedKeyValueIterator<Key,Value>>(inFiles.size());
       
@@ -434,10 +434,10 @@ public class FileUtil {
     for (FileRef mapfile : mapfiles) {
       
       FileSKVIterator reader = null;
-      String path = mapfile.path().toString();
-      FileSystem ns = fs.getFileSystemByPath(path);
+      //String path = mapfile.path().toString();
+      FileSystem ns = fs.getFileSystemByPath(mapfile.path());
       try {
-        reader = FileOperations.getInstance().openReader(path, false, ns, ns.getConf(), acuConf);
+        reader = FileOperations.getInstance().openReader(mapfile.toString(), false, ns, ns.getConf(), acuConf);
         
         Key firstKey = reader.getFirstKey();
         if (firstKey != null) {

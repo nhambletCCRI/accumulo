@@ -128,7 +128,6 @@ public class RecoveryManager {
         String filename = hostFilename[1];
         String parts[] = filename.split("/");
         String sortId = parts[parts.length - 1];
-        // TODO: ACCUMULO-118: choose recovery directory with extension
         String dest = master.getFileSystem().choose(ServerConstants.getRecoveryDirs()) + "/" + sortId;
         log.debug("Recovering " + filename + " to " + dest);
         

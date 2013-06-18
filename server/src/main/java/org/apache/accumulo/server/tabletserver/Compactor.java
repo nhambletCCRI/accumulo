@@ -284,7 +284,7 @@ public class Compactor implements Callable<CompactionStats> {
 
     try {
       FileOperations fileFactory = FileOperations.getInstance();
-      FileSystem ns = this.fs.getFileSystemByPath(outputFile.path().toString());
+      FileSystem ns = this.fs.getFileSystemByPath(outputFile.path());
       mfw = fileFactory.openWriter(outputFile.path().toString(), ns, ns.getConf(), acuTableConf);
       
       Map<String,Set<ByteSequence>> lGroups;
@@ -365,7 +365,7 @@ public class Compactor implements Callable<CompactionStats> {
       try {
         
         FileOperations fileFactory = FileOperations.getInstance();
-        FileSystem fs = this.fs.getFileSystemByPath(mapFile.path().toString());
+        FileSystem fs = this.fs.getFileSystemByPath(mapFile.path());
         FileSKVIterator reader;
         
         reader = fileFactory.openReader(mapFile.path().toString(), false, fs, conf, acuTableConf);

@@ -882,8 +882,9 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
         Map<String,MapFileInfo> fileMap = entry.getValue();
         Map<FileRef, MapFileInfo> fileRefMap = new HashMap<FileRef, MapFileInfo>();
         for (Entry<String,MapFileInfo> mapping : fileMap.entrySet()) {
-          FileSystem ns = fs.getFileSystemByPath(mapping.getKey());
-          Path path = ns.makeQualified(new Path(mapping.getKey()));
+          Path path = new Path(mapping.getKey());
+          FileSystem ns = fs.getFileSystemByPath(path);
+          path = ns.makeQualified(path);
           fileRefMap.put(new FileRef(path.toString(), path), mapping.getValue());
         }
         

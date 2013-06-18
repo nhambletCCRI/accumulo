@@ -68,7 +68,7 @@ public class OfflineMetadataScanner extends ScannerOptions implements Scanner {
   private List<SortedKeyValueIterator<Key,Value>> openMapFiles(Collection<String> files, VolumeManager fs, AccumuloConfiguration conf) throws IOException {
     List<SortedKeyValueIterator<Key,Value>> readers = new ArrayList<SortedKeyValueIterator<Key,Value>>();
     for (String file : files) {
-      FileSystem ns = fs.getFileSystemByPath(file);
+      FileSystem ns = fs.getFileSystemByPath(new Path(file));
       FileSKVIterator reader = FileOperations.getInstance().openReader(file, true, ns, ns.getConf(), conf);
       readers.add(reader);
     }

@@ -196,9 +196,9 @@ public class LogSorter {
     }
     
     private void writeBuffer(String destPath, ArrayList<Pair<LogFileKey,LogFileValue>> buffer, int part) throws IOException {
-      String path = destPath + String.format("/part-r-%05d", part++);
+      Path path = new Path(destPath, String.format("part-r-%05d", part++));
       FileSystem ns = fs.getFileSystemByPath(path);
-      MapFile.Writer output = new MapFile.Writer(ns.getConf(), ns, path, LogFileKey.class, LogFileValue.class);
+      MapFile.Writer output = new MapFile.Writer(ns.getConf(), ns, path.toString(), LogFileKey.class, LogFileValue.class);
       try {
         Collections.sort(buffer, new Comparator<Pair<LogFileKey,LogFileValue>>() {
           @Override

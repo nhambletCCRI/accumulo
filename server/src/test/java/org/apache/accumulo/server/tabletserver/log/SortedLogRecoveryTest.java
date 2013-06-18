@@ -123,7 +123,7 @@ public class SortedLogRecoveryTest {
     try {
       for (Entry<String,KeyValue[]> entry : logs.entrySet()) {
         String path = workdir + "/" + entry.getKey();
-        FileSystem ns = fs.getFileSystemByPath(path);
+        FileSystem ns = fs.getFileSystemByPath(new Path(path));
         Writer map = new MapFile.Writer(ns.getConf(), ns, path + "/log1", LogFileKey.class, LogFileValue.class);
         for (KeyValue lfe : entry.getValue()) {
           map.append(lfe.key, lfe.value);
