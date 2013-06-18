@@ -39,7 +39,7 @@ import org.apache.accumulo.core.tabletserver.thrift.TabletClientService.Client;
 import org.apache.accumulo.core.util.ThriftUtil;
 import org.apache.accumulo.core.zookeeper.ZooUtil;
 import org.apache.accumulo.server.ServerConstants;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.security.SecurityConstants;
 import org.apache.accumulo.server.util.AddressUtil;
 import org.apache.accumulo.server.util.MetadataTable;
@@ -58,11 +58,11 @@ public class GarbageCollectWriteAheadLogs {
   private static final Logger log = Logger.getLogger(GarbageCollectWriteAheadLogs.class);
   
   private final Instance instance;
-  private final FileSystem fs;
+  private final VolumeManager fs;
   
   private boolean useTrash;
   
-  GarbageCollectWriteAheadLogs(Instance instance, FileSystem fs, boolean useTrash) throws IOException {
+  GarbageCollectWriteAheadLogs(Instance instance, VolumeManager fs, boolean useTrash) throws IOException {
     this.instance = instance;
     this.fs = fs;
   }

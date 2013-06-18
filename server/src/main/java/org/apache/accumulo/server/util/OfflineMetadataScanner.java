@@ -51,23 +51,24 @@ import org.apache.accumulo.core.util.TextUtil;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.util.MetadataTable.LogEntry;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 public class OfflineMetadataScanner extends ScannerOptions implements Scanner {
   
   private Set<String> allFiles = new HashSet<String>();
   private Range range = new Range();
-  private final FileSystem fs;
+  private final VolumeManager fs;
   private final AccumuloConfiguration conf;
   
-  private List<SortedKeyValueIterator<Key,Value>> openMapFiles(Collection<String> files, FileSystem fs, AccumuloConfiguration conf) throws IOException {
+  private List<SortedKeyValueIterator<Key,Value>> openMapFiles(Collection<String> files, VolumeManager fs, AccumuloConfiguration conf) throws IOException {
     List<SortedKeyValueIterator<Key,Value>> readers = new ArrayList<SortedKeyValueIterator<Key,Value>>();
     for (String file : files) {
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(file);
+      FileSystem ns = fs.getFileSystemByPath(file);
       FileSKVIterator reader = FileOperations.getInstance().openReader(file, true, ns, ns.getConf(), conf);
       readers.add(reader);
     }
@@ -119,7 +120,7 @@ public class OfflineMetadataScanner extends ScannerOptions implements Scanner {
     
   }
   
-  public OfflineMetadataScanner(AccumuloConfiguration conf, FileSystem fs) throws IOException {
+  public OfflineMetadataScanner(AccumuloConfiguration conf, VolumeManager fs) throws IOException {
     super();
     this.fs = fs;
     this.conf = conf;
@@ -258,7 +259,7 @@ public class OfflineMetadataScanner extends ScannerOptions implements Scanner {
   
   public static void main(String[] args) throws IOException {
     ServerConfiguration conf = new ServerConfiguration(HdfsZooInstance.getInstance());
-    FileSystem fs = FileSystemImpl.get();
+    VolumeManager fs = VolumeManagerImpl.get();
     OfflineMetadataScanner scanner = new OfflineMetadataScanner(conf.getConfiguration(), fs);
     scanner.setRange(Constants.METADATA_KEYSPACE);
     for (Entry<Key,Value> entry : scanner)

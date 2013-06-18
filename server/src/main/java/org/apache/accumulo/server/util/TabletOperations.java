@@ -22,8 +22,8 @@ import java.util.Random;
 import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.util.UtilWaitThread;
 import org.apache.accumulo.server.ServerConstants;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.tabletserver.UniqueNameAllocator;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -36,7 +36,7 @@ public class TabletOperations {
   private static final Random random = new Random();
   
   // TODO ACCUMULO-118 make the namespace selection pluggable
-  public static String createTabletDirectory(FileSystem fs, String tableId, Text endRow) {
+  public static String createTabletDirectory(VolumeManager fs, String tableId, Text endRow) {
     String lowDirectory;
     
     UniqueNameAllocator namer = UniqueNameAllocator.getInstance();
@@ -72,7 +72,7 @@ public class TabletOperations {
   public static String createTabletDirectory(String tableDir, Text endRow) {
     while (true) {
       try {
-        FileSystem fs = FileSystemImpl.get();
+        VolumeManager fs = VolumeManagerImpl.get();
         return createTabletDirectory(fs, tableDir, endRow);
       } catch (IOException e) {
         log.warn(e);

@@ -140,8 +140,8 @@ import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.accumulo.server.conf.TableConfiguration;
 import org.apache.accumulo.server.data.ServerMutation;
 import org.apache.accumulo.server.fs.FileRef;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.master.state.Assignment;
 import org.apache.accumulo.server.master.state.DistributedStoreException;
 import org.apache.accumulo.server.master.state.TServerInstance;
@@ -201,6 +201,7 @@ import org.apache.accumulo.trace.instrument.Trace;
 import org.apache.accumulo.trace.instrument.thrift.TraceWrap;
 import org.apache.accumulo.trace.thrift.TInfo;
 import org.apache.commons.collections.map.LRUMap;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
@@ -231,7 +232,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
   private ServerConfiguration serverConfig;
   private LogSorter logSorter = null;
   
-  public TabletServer(ServerConfiguration conf, FileSystem fs) {
+  public TabletServer(ServerConfiguration conf, VolumeManager fs) {
     super();
     this.serverConfig = conf;
     this.instance = conf.getInstance();
@@ -881,7 +882,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
         Map<String,MapFileInfo> fileMap = entry.getValue();
         Map<FileRef, MapFileInfo> fileRefMap = new HashMap<FileRef, MapFileInfo>();
         for (Entry<String,MapFileInfo> mapping : fileMap.entrySet()) {
-          org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(mapping.getKey());
+          FileSystem ns = fs.getFileSystemByPath(mapping.getKey());
           Path path = ns.makeQualified(new Path(mapping.getKey()));
           fileRefMap.put(new FileRef(path.toString(), path), mapping.getValue());
         }
@@ -2549,7 +2550,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
     }
   }
   
-  private FileSystem fs;
+  private VolumeManager fs;
   private Instance instance;
   
   private final SortedMap<KeyExtent,Tablet> onlineTablets = Collections.synchronizedSortedMap(new TreeMap<KeyExtent,Tablet>());
@@ -3217,7 +3218,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
   public static void main(String[] args) throws IOException {
     try {
       SecurityUtil.serverLogin();
-      FileSystem fs = FileSystemImpl.get();
+      VolumeManager fs = VolumeManagerImpl.get();
       String hostname = Accumulo.getLocalAddress(args);
       Instance instance = HdfsZooInstance.getInstance();
       ServerConfiguration conf = new ServerConfiguration(instance);
@@ -3240,7 +3241,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
     logger.minorCompactionStarted(tablet, lastUpdateSequence, newMapfileLocation);
   }
   
-  public void recover(FileSystem fs, Tablet tablet, List<LogEntry> logEntries, Set<String> tabletFiles, MutationReceiver mutationReceiver) throws IOException {
+  public void recover(VolumeManager fs, Tablet tablet, List<LogEntry> logEntries, Set<String> tabletFiles, MutationReceiver mutationReceiver) throws IOException {
     List<Path> recoveryLogs = new ArrayList<Path>();
     List<LogEntry> sorted = new ArrayList<LogEntry>(logEntries);
     Collections.sort(sorted, new Comparator<LogEntry>() {
@@ -3455,7 +3456,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
     return new DfsLogger.ServerResources() {
       
       @Override
-      public FileSystem getFileSystem() {
+      public VolumeManager getFileSystem() {
         return fs;
       }
       
@@ -3471,7 +3472,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
     };
   }
 
-  public FileSystem getFileSystem() {
+  public VolumeManager getFileSystem() {
     return fs;
   }
   

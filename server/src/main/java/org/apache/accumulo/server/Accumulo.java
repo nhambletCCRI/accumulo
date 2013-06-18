@@ -32,7 +32,7 @@ import org.apache.accumulo.core.util.UtilWaitThread;
 import org.apache.accumulo.core.util.Version;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.util.time.SimpleTimer;
 import org.apache.accumulo.server.zookeeper.ZooReaderWriter;
 import org.apache.hadoop.fs.FileStatus;
@@ -46,7 +46,7 @@ public class Accumulo {
   
   private static final Logger log = Logger.getLogger(Accumulo.class);
   
-  public static synchronized void updateAccumuloVersion(FileSystem fs) {
+  public static synchronized void updateAccumuloVersion(VolumeManager fs) {
     try {
       if (getAccumuloPersistentVersion(fs) == Constants.PREV_DATA_VERSION) {
         fs.create(new Path(ServerConstants.getDataVersionLocation() + "/" + Constants.DATA_VERSION));
@@ -57,10 +57,10 @@ public class Accumulo {
     }
   }
   
-  public static synchronized int getAccumuloPersistentVersion(FileSystem fs) {
+  public static synchronized int getAccumuloPersistentVersion(VolumeManager fs) {
     int dataVersion;
     try {
-      FileStatus[] files = fs.getDefaultNamespace().listStatus(ServerConstants.getDataVersionLocation());
+      FileStatus[] files = fs.getDefaultVolume().listStatus(ServerConstants.getDataVersionLocation());
       if (files == null || files.length == 0) {
         dataVersion = -1; // assume it is 0.5 or earlier
       } else {
@@ -80,7 +80,7 @@ public class Accumulo {
     }
   }
   
-  public static void init(FileSystem fs, ServerConfiguration config, String application) throws UnknownHostException {
+  public static void init(VolumeManager fs, ServerConfiguration config, String application) throws UnknownHostException {
     
     System.setProperty("org.apache.accumulo.core.application", application);
     
@@ -181,7 +181,7 @@ public class Accumulo {
     return result.getHostName();
   }
   
-  public static void waitForZookeeperAndHdfs(FileSystem fs) {
+  public static void waitForZookeeperAndHdfs(VolumeManager fs) {
     log.info("Attempting to talk to zookeeper");
     while (true) {
       try {

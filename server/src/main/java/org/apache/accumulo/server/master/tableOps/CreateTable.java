@@ -32,7 +32,7 @@ import org.apache.accumulo.core.security.TablePermission;
 import org.apache.accumulo.fate.Repo;
 import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeExistsPolicy;
 import org.apache.accumulo.server.ServerConstants;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.master.Master;
 import org.apache.accumulo.server.master.state.tables.TableManager;
 import org.apache.accumulo.server.security.AuditedSecurityOperation;
@@ -145,14 +145,14 @@ class CreateDir extends MasterRepo {
   
   @Override
   public Repo<Master> call(long tid, Master master) throws Exception {
-    FileSystem fs = master.getFileSystem();
+    VolumeManager fs = master.getFileSystem();
     TabletOperations.createTabletDirectory(fs, tableInfo.tableId, null);
     return new PopulateMetadata(tableInfo);
   }
   
   @Override
   public void undo(long tid, Master master) throws Exception {
-    FileSystem fs = master.getFileSystem();
+    VolumeManager fs = master.getFileSystem();
     for(String dir : ServerConstants.getTablesDirs()) {
       fs.deleteRecursively(new Path(dir + "/" + tableInfo.tableId));
     }

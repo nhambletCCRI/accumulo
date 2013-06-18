@@ -98,8 +98,8 @@ import org.apache.accumulo.server.Accumulo;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.accumulo.server.fs.FileRef;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.master.LiveTServerSet.TServerConnection;
 import org.apache.accumulo.server.master.balancer.DefaultLoadBalancer;
 import org.apache.accumulo.server.master.balancer.TabletBalancer;
@@ -190,7 +190,7 @@ public class Master implements LiveTServerSet.Listener, TableObserver, CurrentSt
   final private static int MAX_TSERVER_WORK_CHUNK = 5000;
   final private static int MAX_BAD_STATUS_COUNT = 3;
   
-  final private FileSystem fs;
+  final private VolumeManager fs;
   final private Instance instance;
   final private String hostname;
   final private LiveTServerSet tserverSet;
@@ -449,7 +449,7 @@ public class Master implements LiveTServerSet.Listener, TableObserver, CurrentSt
     return instance;
   }
   
-  public Master(ServerConfiguration config, FileSystem fs, String hostname) throws IOException {
+  public Master(ServerConfiguration config, VolumeManager fs, String hostname) throws IOException {
     this.serverConfig = config;
     this.instance = config.getInstance();
     this.fs = fs;
@@ -2225,7 +2225,7 @@ public class Master implements LiveTServerSet.Listener, TableObserver, CurrentSt
     try {
       SecurityUtil.serverLogin();
       
-      FileSystem fs = FileSystemImpl.get();
+      VolumeManager fs = VolumeManagerImpl.get();
       String hostname = Accumulo.getLocalAddress(args);
       Instance instance = HdfsZooInstance.getInstance();
       ServerConfiguration conf = new ServerConfiguration(instance);
@@ -2377,7 +2377,7 @@ public class Master implements LiveTServerSet.Listener, TableObserver, CurrentSt
     return serverConfig;
   }
   
-  public FileSystem getFileSystem() {
+  public VolumeManager getFileSystem() {
     return this.fs;
   }
   

@@ -49,7 +49,7 @@ import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.fate.Repo;
 import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.accumulo.server.conf.TableConfiguration;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.master.Master;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
@@ -138,7 +138,7 @@ class WriteExportFiles extends MasterRepo {
     Utils.unreserveTable(tableInfo.tableID, tid, false);
   }
   
-  public static void exportTable(FileSystem fs, Connector conn, String tableName, String tableID, String exportDir) throws Exception {
+  public static void exportTable(VolumeManager fs, Connector conn, String tableName, String tableID, String exportDir) throws Exception {
     
     fs.mkdirs(new Path(exportDir));
     
@@ -181,7 +181,7 @@ class WriteExportFiles extends MasterRepo {
     }
   }
   
-  private static void createDistcpFile(FileSystem fs, String exportDir, Path exportMetaFilePath, Map<String,String> uniqueFiles) throws IOException {
+  private static void createDistcpFile(VolumeManager fs, String exportDir, Path exportMetaFilePath, Map<String,String> uniqueFiles) throws IOException {
     BufferedWriter distcpOut = new BufferedWriter(new OutputStreamWriter(fs.create(new Path(exportDir, "distcp.txt"), false)));
     
     try {
@@ -202,7 +202,7 @@ class WriteExportFiles extends MasterRepo {
     }
   }
   
-  private static Map<String,String> exportMetadata(FileSystem fs, Connector conn, String tableID, ZipOutputStream zipOut, DataOutputStream dataOut) throws IOException,
+  private static Map<String,String> exportMetadata(VolumeManager fs, Connector conn, String tableID, ZipOutputStream zipOut, DataOutputStream dataOut) throws IOException,
       TableNotFoundException {
     zipOut.putNextEntry(new ZipEntry(Constants.EXPORT_METADATA_FILE));
     

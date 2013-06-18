@@ -68,11 +68,12 @@ import org.apache.accumulo.server.cli.ClientOnRequiredTable;
 import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.accumulo.server.conf.TableConfiguration;
 import org.apache.accumulo.server.fs.FileRef;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.util.MetadataTable;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
@@ -104,7 +105,7 @@ public class CollectTabletStats {
       columnsTmp = opts.columns.split(",");
     final String columns[] = columnsTmp;
     
-    final FileSystem fs = FileSystemImpl.get();
+    final VolumeManager fs = VolumeManagerImpl.get();
 
     Instance instance = opts.getInstance();
     final ServerConfiguration sconf = new ServerConfiguration(instance);
@@ -376,7 +377,7 @@ public class CollectTabletStats {
   }
   
   private static void reportHdfsBlockLocations(List<FileRef> files) throws Exception {
-    FileSystem fs = FileSystemImpl.get();
+    VolumeManager fs = VolumeManagerImpl.get();
     
     System.out.println("\t\tFile block report : ");
     for (FileRef file : files) {
@@ -386,7 +387,7 @@ public class CollectTabletStats {
         // assume it is a map file
         status = fs.getFileStatus(new Path(file + "/data"));
       }
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(file.path());
+      FileSystem ns = fs.getFileSystemByPath(file.path());
       BlockLocation[] locs = ns.getFileBlockLocations(status, 0, status.getLen());
       
       System.out.println("\t\t\tBlocks for : " + file);
@@ -426,14 +427,14 @@ public class CollectTabletStats {
     return visFilter;
   }
   
-  private static int readFiles(FileSystem fs, AccumuloConfiguration aconf, List<FileRef> files, KeyExtent ke, String[] columns) throws Exception {
+  private static int readFiles(VolumeManager fs, AccumuloConfiguration aconf, List<FileRef> files, KeyExtent ke, String[] columns) throws Exception {
     
     int count = 0;
     
     HashSet<ByteSequence> columnSet = createColumnBSS(columns);
     
     for (FileRef file : files) {
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(file.path());
+      FileSystem ns = fs.getFileSystemByPath(file.path());
       FileSKVIterator reader = FileOperations.getInstance().openReader(file.path().toString(), false, ns, ns.getConf(), aconf);
       Range range = new Range(ke.getPrevEndRow(), false, ke.getEndRow(), true);
       reader.seek(range, columnSet, columnSet.size() == 0 ? false : true);
@@ -455,7 +456,7 @@ public class CollectTabletStats {
     return columnSet;
   }
   
-  private static int readFilesUsingIterStack(FileSystem fs, ServerConfiguration aconf, List<FileRef> files, Authorizations auths, KeyExtent ke, String[] columns,
+  private static int readFilesUsingIterStack(VolumeManager fs, ServerConfiguration aconf, List<FileRef> files, Authorizations auths, KeyExtent ke, String[] columns,
       boolean useTableIterators)
       throws Exception {
     
@@ -464,7 +465,7 @@ public class CollectTabletStats {
     List<SortedKeyValueIterator<Key,Value>> readers = new ArrayList<SortedKeyValueIterator<Key,Value>>(files.size());
     
     for (FileRef file : files) {
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(file.path());
+      FileSystem ns = fs.getFileSystemByPath(file.path());
       readers.add(FileOperations.getInstance().openReader(file.path().toString(), false, ns, ns.getConf(), aconf.getConfiguration()));
     }
     

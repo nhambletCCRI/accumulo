@@ -45,12 +45,13 @@ import org.apache.accumulo.core.util.MetadataTable.DataFileValue;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.accumulo.server.fs.FileRef;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.problems.ProblemReport;
 import org.apache.accumulo.server.problems.ProblemReportingIterator;
 import org.apache.accumulo.server.problems.ProblemReports;
 import org.apache.accumulo.server.problems.ProblemType;
 import org.apache.accumulo.server.util.time.SimpleTimer;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
@@ -102,7 +103,7 @@ public class FileManager {
   
   private Semaphore filePermits;
   
-  private FileSystem fs;
+  private VolumeManager fs;
   
   // the data cache and index cache are allocated in
   // TabletResourceManager and passed through the file opener to
@@ -161,7 +162,7 @@ public class FileManager {
    * @param indexCache
    *          : underlying file can and should be able to handle a null cache
    */
-  FileManager(ServerConfiguration conf, FileSystem fs, int maxOpen, BlockCache dataCache, BlockCache indexCache) {
+  FileManager(ServerConfiguration conf, VolumeManager fs, int maxOpen, BlockCache dataCache, BlockCache indexCache) {
     
     if (maxOpen <= 0)
       throw new IllegalArgumentException("maxOpen <= 0");
@@ -307,7 +308,7 @@ public class FileManager {
     for (String file : filesToOpen) {
       try {
         Path path = fs.getFullPath(ServerConstants.getTablesDirs(), file);
-        org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
+        FileSystem ns = fs.getFileSystemByPath(path);
         //log.debug("Opening "+file + " path " + path);
         FileSKVIterator reader = FileOperations.getInstance().openReader(path.toString(), false, ns, ns.getConf(), conf.getTableConfiguration(table.toString()),
             dataCache, indexCache);

@@ -51,29 +51,29 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.util.Progressable;
 import org.apache.log4j.Logger;
 
-public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem {
+public class VolumeManagerImpl implements VolumeManager {
   
   private static final Logger log = Logger.getLogger(FileSystem.class);
   
-  Map<String, ? extends FileSystem> namespaces;
-  String defaultNamespace;
+  Map<String, ? extends FileSystem> volumes;
+  String defaultVolumes;
   AccumuloConfiguration conf;
   
-  protected FileSystemImpl(Map<String, ? extends FileSystem> namespaces, String defaultNamespace, AccumuloConfiguration conf) {
-    this.namespaces = namespaces;
-    this.defaultNamespace = defaultNamespace;
+  protected VolumeManagerImpl(Map<String, ? extends FileSystem> volumes, String defaultVolume, AccumuloConfiguration conf) {
+    this.volumes = volumes;
+    this.defaultVolumes = defaultVolume;
     this.conf = conf;
     ensureSyncIsEnabled();
   }
   
-  public static org.apache.accumulo.server.fs.FileSystem getLocal() throws IOException {
-    return new FileSystemImpl(Collections.singletonMap("", FileSystem.getLocal(CachedConfiguration.getInstance())), "", DefaultConfiguration.getDefaultConfiguration());
+  public static org.apache.accumulo.server.fs.VolumeManager getLocal() throws IOException {
+    return new VolumeManagerImpl(Collections.singletonMap("", FileSystem.getLocal(CachedConfiguration.getInstance())), "", DefaultConfiguration.getDefaultConfiguration());
   }
 
   @Override
   public void close() throws IOException {
     IOException ex = null;
-    for (FileSystem fs : namespaces.values()) {
+    for (FileSystem fs : volumes.values()) {
       try {
         fs.close();
       } catch (IOException e) {
@@ -250,7 +250,7 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
       }
     }
       
-    return namespaces.get(defaultNamespace);
+    return volumes.get(defaultVolumes);
   }
 
   @Override
@@ -259,8 +259,8 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
   }
 
   @Override
-  public Map<String, ? extends org.apache.hadoop.fs.FileSystem>  getFileSystems() {
-    return namespaces;
+  public Map<String, ? extends FileSystem>  getFileSystems() {
+    return volumes;
   }
 
   @Override
@@ -283,7 +283,7 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
     FileSystem source = getFileSystemByPath(path);
     FileSystem dest = getFileSystemByPath(newPath);
     if (source != dest) {
-      throw new NotImplementedException("Cannot rename files across namespaces: " + path + " -> " + newPath);
+      throw new NotImplementedException("Cannot rename files across volumes: " + path + " -> " + newPath);
     }
     return source.rename(path, newPath);
   }
@@ -305,18 +305,18 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
     return getFileSystemByPath(path).isFile(path);
   }
 
-  public static org.apache.accumulo.server.fs.FileSystem get() throws IOException {
+  public static org.apache.accumulo.server.fs.VolumeManager get() throws IOException {
     AccumuloConfiguration conf = ServerConfiguration.getSystemConfiguration(HdfsZooInstance.getInstance());
     return get(conf);
   }
   
   static private final String DEFAULT = "";
 
-  public static org.apache.accumulo.server.fs.FileSystem get(AccumuloConfiguration conf) throws IOException {
+  public static org.apache.accumulo.server.fs.VolumeManager get(AccumuloConfiguration conf) throws IOException {
     Map<String, FileSystem> fileSystems = new HashMap<String, FileSystem>();
     Configuration hadoopConf = CachedConfiguration.getInstance();
     fileSystems.put(DEFAULT, FileSystem.get(hadoopConf));
-    String ns = ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_NAMESPACES);
+    String ns = ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_VOLUMES);
     if (ns != null) {
       for (String space : ns.split(",")) {
         if (space.contains(":")) {
@@ -326,7 +326,7 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
         }
       }
     }
-    return new FileSystemImpl(fileSystems, "", conf);
+    return new VolumeManagerImpl(fileSystems, "", conf);
   }
 
   @Override
@@ -371,8 +371,8 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
   }
 
   @Override
-  public FileSystem getDefaultNamespace() {
-    return namespaces.get(defaultNamespace);
+  public FileSystem getDefaultVolume() {
+    return volumes.get(defaultVolumes);
   }
 
   @Override
@@ -410,7 +410,7 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
   }
 
   @Override
-  public String newPathOnSameNamespace(String sourceDir, String suffix) {
+  public String newPathOnSameVolume(String sourceDir, String suffix) {
     for (String fs : getFileSystems().keySet()) {
         if (sourceDir.startsWith(fs)) {
           return fs + "/" + suffix;
@@ -446,9 +446,8 @@ public class FileSystemImpl implements org.apache.accumulo.server.fs.FileSystem 
   }
 
   @Override
-  public ContentSummary getContentSummary(String dir) {
-    // TODO Auto-generated method stub
-    return null;
+  public ContentSummary getContentSummary(Path dir) throws IOException {
+    return getFileSystemByPath(dir).getContentSummary(dir);
   }
 
 }

@@ -28,8 +28,8 @@ import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.server.cli.ClientOpts;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.Logger;
 
@@ -52,7 +52,7 @@ public class RemoveEntriesForMissingFiles {
     ScannerOpts scanOpts = new ScannerOpts();
     BatchWriterOpts bwOpts = new BatchWriterOpts();
     opts.parseArgs(RemoveEntriesForMissingFiles.class.getName(), args, scanOpts, bwOpts);
-    FileSystem fs = FileSystemImpl.get();
+    VolumeManager fs = VolumeManagerImpl.get();
     Connector connector = opts.getConnector();
     Scanner metadata = connector.createScanner(Constants.METADATA_TABLE_NAME, opts.auths);
     metadata.setBatchSize(scanOpts.scanBatchSize);

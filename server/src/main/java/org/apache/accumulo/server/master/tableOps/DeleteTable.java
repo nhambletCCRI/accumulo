@@ -37,7 +37,7 @@ import org.apache.accumulo.core.master.state.tables.TableState;
 import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.fate.Repo;
 import org.apache.accumulo.server.ServerConstants;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.master.Master;
 import org.apache.accumulo.server.master.state.MetaDataTableScanner;
 import org.apache.accumulo.server.master.state.TabletLocationState;
@@ -168,7 +168,7 @@ class CleanUp extends MasterRepo {
     if (refCount == 0) {
       // delete the map files
       try {
-        FileSystem fs = master.getFileSystem();
+        VolumeManager fs = master.getFileSystem();
         for (String dir : ServerConstants.getTablesDirs()) {
           fs.deleteRecursively(new Path(dir, tableId));
         }

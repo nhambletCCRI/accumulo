@@ -37,12 +37,13 @@ import org.apache.accumulo.core.master.thrift.RecoveryStatus;
 import org.apache.accumulo.core.util.Pair;
 import org.apache.accumulo.core.util.SimpleThreadPool;
 import org.apache.accumulo.core.zookeeper.ZooUtil;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.logger.LogFileKey;
 import org.apache.accumulo.server.logger.LogFileValue;
 import org.apache.accumulo.server.zookeeper.DistributedWorkQueue;
 import org.apache.accumulo.server.zookeeper.DistributedWorkQueue.Processor;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.MapFile;
 import org.apache.log4j.Logger;
@@ -54,7 +55,7 @@ import org.apache.zookeeper.KeeperException;
 public class LogSorter {
   
   private static final Logger log = Logger.getLogger(LogSorter.class);
-  FileSystem fs;
+  VolumeManager fs;
   AccumuloConfiguration conf;
   
   private final Map<String,LogProcessor> currentWork = Collections.synchronizedMap(new HashMap<String,LogProcessor>());
@@ -196,7 +197,7 @@ public class LogSorter {
     
     private void writeBuffer(String destPath, ArrayList<Pair<LogFileKey,LogFileValue>> buffer, int part) throws IOException {
       String path = destPath + String.format("/part-r-%05d", part++);
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
+      FileSystem ns = fs.getFileSystemByPath(path);
       MapFile.Writer output = new MapFile.Writer(ns.getConf(), ns, path, LogFileKey.class, LogFileValue.class);
       try {
         Collections.sort(buffer, new Comparator<Pair<LogFileKey,LogFileValue>>() {
@@ -237,7 +238,7 @@ public class LogSorter {
   ThreadPoolExecutor threadPool;
   private final Instance instance;
   
-  public LogSorter(Instance instance, FileSystem fs, AccumuloConfiguration conf) {
+  public LogSorter(Instance instance, VolumeManager fs, AccumuloConfiguration conf) {
     this.instance = instance;
     this.fs = fs;
     this.conf = conf;

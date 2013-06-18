@@ -29,7 +29,7 @@ import java.util.Set;
 
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Mutation;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.logger.LogFileKey;
 import org.apache.accumulo.server.logger.LogFileValue;
 import org.apache.hadoop.fs.Path;
@@ -54,9 +54,9 @@ public class SortedLogRecovery {
     public UnusedException() { super(); }
   }
 
-  private FileSystem fs;
+  private VolumeManager fs;
 
-  public SortedLogRecovery(FileSystem fs) {
+  public SortedLogRecovery(VolumeManager fs) {
     this.fs = fs;
   }
   

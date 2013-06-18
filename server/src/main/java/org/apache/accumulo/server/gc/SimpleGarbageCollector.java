@@ -76,8 +76,8 @@ import org.apache.accumulo.server.Accumulo;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.master.state.tables.TableManager;
 import org.apache.accumulo.server.security.SecurityConstants;
 import org.apache.accumulo.server.util.Halt;
@@ -122,7 +122,7 @@ public class SimpleGarbageCollector implements Iface {
   private TCredentials credentials;
   private long gcStartDelay;
   private boolean checkForBulkProcessingFiles;
-  private FileSystem fs;
+  private VolumeManager fs;
   private boolean useTrash = true;
   private boolean safemode = false, offline = false, verbose = false;
   private String address = "localhost";
@@ -140,7 +140,7 @@ public class SimpleGarbageCollector implements Iface {
     
     Instance instance = HdfsZooInstance.getInstance();
     ServerConfiguration serverConf = new ServerConfiguration(instance);
-    final FileSystem fs = FileSystemImpl.get();
+    final VolumeManager fs = VolumeManagerImpl.get();
     Accumulo.init(fs, serverConf, "gc");
     String address = "localhost";
     SimpleGarbageCollector gc = new SimpleGarbageCollector();
@@ -179,7 +179,7 @@ public class SimpleGarbageCollector implements Iface {
     this.address = address;
   }
   
-  public void init(FileSystem fs, Instance instance, TCredentials credentials, boolean noTrash) throws IOException {
+  public void init(VolumeManager fs, Instance instance, TCredentials credentials, boolean noTrash) throws IOException {
     this.fs = fs;
     this.credentials = credentials;
     this.instance = instance;
@@ -560,7 +560,6 @@ public class SimpleGarbageCollector implements Iface {
     scanner.fetchColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY);
     scanner.fetchColumnFamily(Constants.METADATA_SCANFILE_COLUMN_FAMILY);
     Constants.METADATA_DIRECTORY_COLUMN.fetch(scanner);
-    log.debug("Candidates: " + candidates);
     TabletIterator tabletIterator = new TabletIterator(scanner, Constants.METADATA_KEYSPACE, false, true);
     
     while (tabletIterator.hasNext()) {
@@ -583,7 +582,6 @@ public class SimpleGarbageCollector implements Iface {
                 delete = "/" + table + "/" + cf;
             }
           }
-          log.debug("entry: " + delete);
           // WARNING: This line is EXTREMELY IMPORTANT.
           // You MUST REMOVE candidates that are still in use
           if (candidates.remove(delete))
@@ -606,7 +604,7 @@ public class SimpleGarbageCollector implements Iface {
   final static String METADATA_TABLE_DIR = "/" + Constants.METADATA_TABLE_ID;
   
   private static void putMarkerDeleteMutation(final String delete, final BatchWriter writer, final BatchWriter rootWriter) throws MutationsRejectedException {
-    if (delete.startsWith(METADATA_TABLE_DIR)) {
+    if (delete.contains(METADATA_TABLE_DIR)) {
       Mutation m = new Mutation(new Text(Constants.METADATA_DELETE_FLAG_FOR_METADATA_PREFIX + delete));
       m.putDelete(EMPTY_TEXT, EMPTY_TEXT);
       rootWriter.addMutation(m);

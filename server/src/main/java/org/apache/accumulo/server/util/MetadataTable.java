@@ -70,8 +70,8 @@ import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeMissingPolicy;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.fs.FileRef;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.master.state.TServerInstance;
 import org.apache.accumulo.server.security.SecurityConstants;
 import org.apache.accumulo.server.zookeeper.ZooLock;
@@ -341,7 +341,7 @@ public class MetadataTable extends org.apache.accumulo.core.util.MetadataTable {
     Scanner mdScanner = new ScannerImpl(HdfsZooInstance.getInstance(), credentials, Constants.METADATA_TABLE_ID, Authorizations.EMPTY);
     mdScanner.fetchColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY);
     Text row = extent.getMetadataEntry();
-    FileSystem fs = FileSystemImpl.get();
+    VolumeManager fs = VolumeManagerImpl.get();
     
     Key endKey = new Key(row, Constants.METADATA_DATAFILE_COLUMN_FAMILY, new Text(""));
     endKey = endKey.followingKey(PartialKey.ROW_COLFAM);
@@ -491,7 +491,7 @@ public class MetadataTable extends org.apache.accumulo.core.util.MetadataTable {
         pathToRemove = "/" + tableId + "/" + pathToRemove;
     }
     
-    Path path = FileSystemImpl.get().getFullPath(ServerConstants.getTablesDirs(), pathToRemove);
+    Path path = VolumeManagerImpl.get().getFullPath(ServerConstants.getTablesDirs(), pathToRemove);
     Mutation delFlag = new Mutation(new Text(prefix + path.toString()));
     delFlag.put(EMPTY_TEXT, EMPTY_TEXT, new Value(new byte[] {}));
     return delFlag;
@@ -519,7 +519,7 @@ public class MetadataTable extends org.apache.accumulo.core.util.MetadataTable {
     ScannerImpl scanner2 = new ScannerImpl(HdfsZooInstance.getInstance(), credentials, Constants.METADATA_TABLE_ID, Authorizations.EMPTY);
     scanner2.setRange(new Range(prevRowKey, prevRowKey.followingKey(PartialKey.ROW)));
     
-    FileSystem fs = FileSystemImpl.get();
+    VolumeManager fs = VolumeManagerImpl.get();
     if (!scanner2.iterator().hasNext()) {
       log.info("Rolling back incomplete split " + metadataEntry + " " + metadataPrevEndRow);
       rollBackSplit(metadataEntry, KeyExtent.decodePrevEndRow(oper), credentials, lock);
@@ -658,7 +658,7 @@ public class MetadataTable extends org.apache.accumulo.core.util.MetadataTable {
         Key key = cell.getKey();
         
         if (key.getColumnFamily().equals(Constants.METADATA_DATAFILE_COLUMN_FAMILY)) {
-          FileRef ref = new FileRef(FileSystemImpl.get(), key);
+          FileRef ref = new FileRef(VolumeManagerImpl.get(), key);
           bw.addMutation(createDeleteMutation(tableId, ref.meta().toString()));
         }
         
@@ -796,11 +796,11 @@ public class MetadataTable extends org.apache.accumulo.core.util.MetadataTable {
     ArrayList<LogEntry> result = new ArrayList<LogEntry>();
     TreeMap<FileRef,DataFileValue> sizes = new TreeMap<FileRef,DataFileValue>();
     
-    FileSystem fs = FileSystemImpl.get();
+    VolumeManager fs = VolumeManagerImpl.get();
     if (extent.isRootTablet()) {
       getRootLogEntries(result);
       Path rootDir = new Path(ServerConstants.getRootTabletDir());
-      rootDir = rootDir.makeQualified(fs.getDefaultNamespace());
+      rootDir = rootDir.makeQualified(fs.getDefaultVolume());
       FileStatus[] files = fs.listStatus(rootDir);
       for (FileStatus fileStatus : files) {
         if (fileStatus.getPath().toString().endsWith("_tmp")) {
@@ -1191,7 +1191,7 @@ public class MetadataTable extends org.apache.accumulo.core.util.MetadataTable {
   public static List<FileRef> getBulkFilesLoaded(Connector conn, KeyExtent extent, long tid) throws IOException {
     List<FileRef> result = new ArrayList<FileRef>();
     try {
-      FileSystem fs = FileSystemImpl.get();
+      VolumeManager fs = VolumeManagerImpl.get();
       Scanner mscanner = new IsolatedScanner(conn.createScanner(Constants.METADATA_TABLE_NAME, Authorizations.EMPTY));
       mscanner.setRange(extent.toMetadataRange());
       mscanner.fetchColumnFamily(Constants.METADATA_BULKFILE_COLUMN_FAMILY);
@@ -1215,7 +1215,7 @@ public class MetadataTable extends org.apache.accumulo.core.util.MetadataTable {
     
     Map<FileRef,Long> ret = new HashMap<FileRef,Long>();
     
-    FileSystem fs = FileSystemImpl.get();
+    VolumeManager fs = VolumeManagerImpl.get();
     Scanner scanner = new ScannerImpl(HdfsZooInstance.getInstance(), credentials, Constants.METADATA_TABLE_ID, Authorizations.EMPTY);
     scanner.setRange(new Range(metadataRow));
     scanner.fetchColumnFamily(Constants.METADATA_BULKFILE_COLUMN_FAMILY);

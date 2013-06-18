@@ -21,7 +21,8 @@ import java.io.IOException;
 
 import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.server.master.Master;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -32,8 +33,8 @@ public class HadoopLogCloser implements LogCloser {
   private static Logger log = Logger.getLogger(HadoopLogCloser.class);
 
   @Override
-  public long close(Master master, FileSystem fs, Path source) throws IOException {
-    org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(source);
+  public long close(Master master, VolumeManager fs, Path source) throws IOException {
+    FileSystem ns = fs.getFileSystemByPath(source);
     if (ns instanceof DistributedFileSystem) {
       DistributedFileSystem dfs = (DistributedFileSystem) ns;
       try {

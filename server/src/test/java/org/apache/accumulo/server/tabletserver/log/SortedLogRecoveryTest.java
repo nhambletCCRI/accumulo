@@ -37,11 +37,12 @@ import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.server.data.ServerMutation;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.logger.LogEvents;
 import org.apache.accumulo.server.logger.LogFileKey;
 import org.apache.accumulo.server.logger.LogFileValue;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.MapFile;
 import org.apache.hadoop.io.MapFile.Writer;
@@ -116,13 +117,13 @@ public class SortedLogRecoveryTest {
     TemporaryFolder root = new TemporaryFolder();
     root.create();
     final String workdir = "file://" + root.getRoot().getAbsolutePath() + "/workdir";
-    FileSystem fs = FileSystemImpl.getLocal();
+    VolumeManager fs = VolumeManagerImpl.getLocal();
     fs.deleteRecursively(new Path(workdir));
     ArrayList<Path> dirs = new ArrayList<Path>();
     try {
       for (Entry<String,KeyValue[]> entry : logs.entrySet()) {
         String path = workdir + "/" + entry.getKey();
-        org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
+        FileSystem ns = fs.getFileSystemByPath(path);
         Writer map = new MapFile.Writer(ns.getConf(), ns, path + "/log1", LogFileKey.class, LogFileValue.class);
         for (KeyValue lfe : entry.getValue()) {
           map.append(lfe.key, lfe.value);

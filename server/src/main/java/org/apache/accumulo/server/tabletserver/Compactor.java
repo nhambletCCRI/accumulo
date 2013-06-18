@@ -54,7 +54,7 @@ import org.apache.accumulo.core.util.LocalityGroupUtil.LocalityGroupConfiguratio
 import org.apache.accumulo.core.util.MetadataTable.DataFileValue;
 import org.apache.accumulo.server.conf.TableConfiguration;
 import org.apache.accumulo.server.fs.FileRef;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.problems.ProblemReport;
 import org.apache.accumulo.server.problems.ProblemReportingIterator;
 import org.apache.accumulo.server.problems.ProblemReports;
@@ -64,6 +64,7 @@ import org.apache.accumulo.server.tabletserver.Tablet.MinorCompactionReason;
 import org.apache.accumulo.trace.instrument.Span;
 import org.apache.accumulo.trace.instrument.Trace;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.log4j.Logger;
 
 
@@ -125,7 +126,7 @@ public class Compactor implements Callable<CompactionStats> {
   private TableConfiguration acuTableConf;
   private CompactionEnv env;
   private Configuration conf;
-  private FileSystem fs;
+  private VolumeManager fs;
   protected KeyExtent extent;
   private List<IteratorSetting> iterators;
   
@@ -236,7 +237,7 @@ public class Compactor implements Callable<CompactionStats> {
     return compactions;
   }
 
-  Compactor(Configuration conf, FileSystem fs, Map<FileRef,DataFileValue> files, InMemoryMap imm, FileRef outputFile, boolean propogateDeletes,
+  Compactor(Configuration conf, VolumeManager fs, Map<FileRef,DataFileValue> files, InMemoryMap imm, FileRef outputFile, boolean propogateDeletes,
       TableConfiguration acuTableConf, KeyExtent extent, CompactionEnv env, List<IteratorSetting> iterators, MajorCompactionReason reason) {
     this.extent = extent;
     this.conf = conf;
@@ -253,12 +254,12 @@ public class Compactor implements Callable<CompactionStats> {
     startTime = System.currentTimeMillis();
   }
   
-  Compactor(Configuration conf, FileSystem fs, Map<FileRef,DataFileValue> files, InMemoryMap imm, FileRef outputFile, boolean propogateDeletes,
+  Compactor(Configuration conf, VolumeManager fs, Map<FileRef,DataFileValue> files, InMemoryMap imm, FileRef outputFile, boolean propogateDeletes,
       TableConfiguration acuTableConf, KeyExtent extent, CompactionEnv env) {
     this(conf, fs, files, imm, outputFile, propogateDeletes, acuTableConf, extent, env, new ArrayList<IteratorSetting>(), null);
   }
   
-  public FileSystem getFileSystem() {
+  public VolumeManager getFileSystem() {
     return fs;
   }
   
@@ -283,7 +284,7 @@ public class Compactor implements Callable<CompactionStats> {
 
     try {
       FileOperations fileFactory = FileOperations.getInstance();
-      org.apache.hadoop.fs.FileSystem ns = this.fs.getFileSystemByPath(outputFile.path().toString());
+      FileSystem ns = this.fs.getFileSystemByPath(outputFile.path().toString());
       mfw = fileFactory.openWriter(outputFile.path().toString(), ns, ns.getConf(), acuTableConf);
       
       Map<String,Set<ByteSequence>> lGroups;
@@ -364,7 +365,7 @@ public class Compactor implements Callable<CompactionStats> {
       try {
         
         FileOperations fileFactory = FileOperations.getInstance();
-        org.apache.hadoop.fs.FileSystem fs = this.fs.getFileSystemByPath(mapFile.path().toString());
+        FileSystem fs = this.fs.getFileSystemByPath(mapFile.path().toString());
         FileSKVIterator reader;
         
         reader = fileFactory.openReader(mapFile.path().toString(), false, fs, conf, acuTableConf);

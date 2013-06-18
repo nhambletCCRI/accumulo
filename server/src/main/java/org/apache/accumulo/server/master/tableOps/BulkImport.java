@@ -62,7 +62,7 @@ import org.apache.accumulo.fate.Repo;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.ServerConfiguration;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.master.LiveTServerSet.TServerConnection;
 import org.apache.accumulo.server.master.Master;
 import org.apache.accumulo.server.master.state.TServerInstance;
@@ -146,7 +146,7 @@ public class BulkImport extends MasterRepo {
     Utils.getReadLock(tableId, tid).lock();
     
     // check that the error directory exists and is empty
-    FileSystem fs = master.getFileSystem();
+    VolumeManager fs = master.getFileSystem();
     
     Path errorPath = new Path(errorDir);
     FileStatus errorStatus = null;
@@ -179,7 +179,7 @@ public class BulkImport extends MasterRepo {
     }
   }
   
-  private Path createNewBulkDir(FileSystem fs, String tableId) throws IOException {
+  private Path createNewBulkDir(VolumeManager fs, String tableId) throws IOException {
     String tableDir = null;
     loop:
     for (String dir : fs.getFileSystems().keySet()) {
@@ -218,7 +218,7 @@ public class BulkImport extends MasterRepo {
     }
   }
   
-  private String prepareBulkImport(FileSystem fs, String dir, String tableId) throws IOException {
+  private String prepareBulkImport(VolumeManager fs, String dir, String tableId) throws IOException {
     Path bulkDir = createNewBulkDir(fs, tableId);
     
     MetadataTable.addBulkLoadInProgressFlag("/" + bulkDir.getParent().getName() + "/" + bulkDir.getName());
@@ -384,7 +384,7 @@ class CopyFailed extends MasterRepo {
   public Repo<Master> call(long tid, Master master) throws Exception {
     // This needs to execute after the arbiter is stopped
     
-    FileSystem fs = master.getFileSystem();
+    VolumeManager fs = master.getFileSystem();
     
     if (!fs.exists(new Path(error, BulkImport.FAILURES_TXT)))
       return new CleanUpBulkImport(tableId, source, bulk, error);
@@ -505,7 +505,7 @@ class LoadFiles extends MasterRepo {
   public Repo<Master> call(final long tid, final Master master) throws Exception {
     initializeThreadPool(master);
     final SiteConfiguration conf = ServerConfiguration.getSiteConfiguration();
-    FileSystem fs = master.getFileSystem();
+    VolumeManager fs = master.getFileSystem();
     List<FileStatus> files = new ArrayList<FileStatus>();
     for (FileStatus entry : fs.listStatus(new Path(bulk))) {
       files.add(entry);

@@ -30,7 +30,7 @@ public class FileRef implements Comparable<FileRef> {
   String metaReference;  // something like ../2/d-00000/A00001.rf
   Path fullReference;  // something like hdfs://nn:9001/accumulo/tables/2/d-00000/A00001.rf
   
-  public FileRef(FileSystem fs, Key key) {
+  public FileRef(VolumeManager fs, Key key) {
     metaReference = key.getColumnQualifier().toString();
     fullReference = fs.getFullPath(key);
   }

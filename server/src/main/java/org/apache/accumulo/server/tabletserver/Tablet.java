@@ -93,8 +93,8 @@ import org.apache.accumulo.server.client.HdfsZooInstance;
 import org.apache.accumulo.server.conf.TableConfiguration;
 import org.apache.accumulo.server.constraints.ConstraintChecker;
 import org.apache.accumulo.server.fs.FileRef;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.master.state.TServerInstance;
 import org.apache.accumulo.server.master.tableOps.CompactRange.CompactionIterators;
 import org.apache.accumulo.server.problems.ProblemReport;
@@ -125,6 +125,7 @@ import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.log4j.Logger;
@@ -386,7 +387,7 @@ public class Tablet {
   private TServerInstance lastLocation;
   
   private Configuration conf;
-  private FileSystem fs;
+  private VolumeManager fs;
   
   private TableConfiguration acuTableConf;
   
@@ -1060,7 +1061,7 @@ public class Tablet {
   
   private Tablet(TabletServer tabletServer, Text location, KeyExtent extent, TabletResourceManager trm, Configuration conf,
       SortedMap<Key,Value> tabletsKeyValues) throws IOException {
-    this(tabletServer, location, extent, trm, conf, FileSystemImpl.get(),
+    this(tabletServer, location, extent, trm, conf, VolumeManagerImpl.get(),
         tabletsKeyValues);
   }
   
@@ -1068,7 +1069,7 @@ public class Tablet {
   
   private Tablet(TabletServer tabletServer, Text location, KeyExtent extent, TabletResourceManager trm, Configuration conf,
       SortedMap<FileRef,DataFileValue> datafiles, String time, long initFlushID, long initCompactID) throws IOException {
-    this(tabletServer, location, extent, trm, conf, FileSystemImpl.get(), EMPTY,
+    this(tabletServer, location, extent, trm, conf, VolumeManagerImpl.get(), EMPTY,
         datafiles, time, null, new HashSet<FileRef>(), initFlushID, initCompactID);
   }
   
@@ -1094,14 +1095,14 @@ public class Tablet {
     return null;
   }
   
-  private static SortedMap<FileRef,DataFileValue> lookupDatafiles(AccumuloConfiguration conf, Text locText, FileSystem fs, KeyExtent extent,
+  private static SortedMap<FileRef,DataFileValue> lookupDatafiles(AccumuloConfiguration conf, Text locText, VolumeManager fs, KeyExtent extent,
       SortedMap<Key,Value> tabletsKeyValues) throws IOException {
     
     TreeMap<FileRef,DataFileValue> datafiles = new TreeMap<FileRef,DataFileValue>();
     
     if (extent.isRootTablet()) { // the meta0 tablet
       Path location = new Path(ServerConstants.getRootTabletDir());
-      location = location.makeQualified(fs.getDefaultNamespace());
+      location = location.makeQualified(fs.getDefaultVolume());
       // cleanUpFiles() has special handling for delete. files
       FileStatus[] files = fs.listStatus(location);
       Collection<String> goodPaths = cleanUpFiles(fs, files, true);
@@ -1168,7 +1169,7 @@ public class Tablet {
     return logEntries;
   }
   
-  private static Set<FileRef> lookupScanFiles(KeyExtent extent, SortedMap<Key,Value> tabletsKeyValues, FileSystem fs) throws IOException {
+  private static Set<FileRef> lookupScanFiles(KeyExtent extent, SortedMap<Key,Value> tabletsKeyValues, VolumeManager fs) throws IOException {
     HashSet<FileRef> scanFiles = new HashSet<FileRef>();
     
     Text row = extent.getMetadataEntry();
@@ -1206,7 +1207,7 @@ public class Tablet {
     return -1;
   }
   
-  private Tablet(TabletServer tabletServer, Text location, KeyExtent extent, TabletResourceManager trm, Configuration conf, FileSystem fs,
+  private Tablet(TabletServer tabletServer, Text location, KeyExtent extent, TabletResourceManager trm, Configuration conf, VolumeManager fs,
       SortedMap<Key,Value> tabletsKeyValues) throws IOException {
     this(tabletServer, location, extent, trm, conf, fs, lookupLogEntries(extent, tabletsKeyValues), lookupDatafiles(tabletServer.getSystemConfiguration(),
         location, fs, extent, tabletsKeyValues), lookupTime(tabletServer.getSystemConfiguration(), extent, tabletsKeyValues), lookupLastServer(extent,
@@ -1226,7 +1227,7 @@ public class Tablet {
    * yet another constructor - this one allows us to avoid costly lookups into the Metadata table if we already know the files we need - as at split time
    */
   private Tablet(final TabletServer tabletServer, final Text location, final KeyExtent extent, final TabletResourceManager trm, final Configuration conf,
-      final FileSystem fs, final List<LogEntry> logEntries, final SortedMap<FileRef,DataFileValue> datafiles, String time, final TServerInstance lastLocation,
+      final VolumeManager fs, final List<LogEntry> logEntries, final SortedMap<FileRef,DataFileValue> datafiles, String time, final TServerInstance lastLocation,
       Set<FileRef> scanFiles, long initFlushID, long initCompactID) throws IOException {
     if (location.find(":") >= 0) {
         this.location = new Path(location.toString());
@@ -1251,7 +1252,7 @@ public class Tablet {
       long rtime = Long.MIN_VALUE;
       for (FileRef ref : datafiles.keySet()) {
         Path path = ref.path();
-        org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
+        FileSystem ns = fs.getFileSystemByPath(path);
         FileSKVIterator reader = FileOperations.getInstance().openReader(path.toString(), true, ns, ns.getConf(),
             tabletServer.getTableConfiguration(extent));
         long maxTime = -1;
@@ -1419,7 +1420,7 @@ public class Tablet {
     }
   }
   
-  private static Collection<String> cleanUpFiles(FileSystem fs, FileStatus[] files, boolean deleteTmp) throws IOException {
+  private static Collection<String> cleanUpFiles(VolumeManager fs, FileStatus[] files, boolean deleteTmp) throws IOException {
     /*
      * called in constructor and before major compactions
      */
@@ -2040,7 +2041,7 @@ public class Tablet {
     
   }
   
-  private DataFileValue minorCompact(Configuration conf, FileSystem fs, InMemoryMap memTable, FileRef tmpDatafile, FileRef newDatafile, FileRef mergeFile,
+  private DataFileValue minorCompact(Configuration conf, VolumeManager fs, InMemoryMap memTable, FileRef tmpDatafile, FileRef newDatafile, FileRef mergeFile,
       boolean hasQueueTime, long queued, CommitSession commitSession, long flushId, MinorCompactionReason mincReason) {
     boolean failed = false;
     long start = System.currentTimeMillis();
@@ -2906,7 +2907,7 @@ public class Tablet {
     
     for (Entry<FileRef,DataFileValue> entry : files.entrySet()) {
       FileRef file = entry.getKey();
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(file.path());
+      FileSystem ns = fs.getFileSystemByPath(file.path());
       FileSKVIterator openReader = fileFactory.openReader(file.path().toString(), true, ns, ns.getConf(), acuTableConf);
       try {
         Key first = openReader.getFirstKey();

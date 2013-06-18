@@ -45,8 +45,9 @@ import org.apache.accumulo.core.iterators.system.MultiIterator;
 import org.apache.accumulo.core.util.CachedConfiguration;
 import org.apache.accumulo.core.util.LocalityGroupUtil;
 import org.apache.accumulo.server.fs.FileRef;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
@@ -74,7 +75,7 @@ public class FileUtil {
   
   private static final Logger log = Logger.getLogger(FileUtil.class);
   
-  private static String createTmpDir(AccumuloConfiguration acuConf, FileSystem fs) throws IOException {
+  private static String createTmpDir(AccumuloConfiguration acuConf, VolumeManager fs) throws IOException {
     String accumuloDir = acuConf.get(Property.INSTANCE_DFS_DIR);
     
     String tmpDir = null;
@@ -99,7 +100,7 @@ public class FileUtil {
     return tmpDir;
   }
   
-  public static Collection<FileRef> reduceFiles(AccumuloConfiguration acuConf, Configuration conf, FileSystem fs, Text prevEndRow, Text endRow,
+  public static Collection<FileRef> reduceFiles(AccumuloConfiguration acuConf, Configuration conf, VolumeManager fs, Text prevEndRow, Text endRow,
       Collection<FileRef> mapFiles, int maxFiles, String tmpDir, int pass) throws IOException {
     ArrayList<FileRef> paths = new ArrayList<FileRef>(mapFiles);
     
@@ -123,7 +124,7 @@ public class FileUtil {
       String newMapFile = String.format("%s/%04d." + RFile.EXTENSION, newDir, count++);
       
       outFiles.add(new FileRef(newMapFile));
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(newMapFile);
+      FileSystem ns = fs.getFileSystemByPath(newMapFile);
       FileSKVWriter writer = new RFileOperations().openWriter(newMapFile, ns, ns.getConf(), acuConf);
       writer.startDefaultLocalityGroup();
       List<SortedKeyValueIterator<Key,Value>> iters = new ArrayList<SortedKeyValueIterator<Key,Value>>(inFiles.size());
@@ -181,12 +182,12 @@ public class FileUtil {
     return reduceFiles(acuConf, conf, fs, prevEndRow, endRow, outFiles, maxFiles, tmpDir, pass + 1);
   }
 
-  public static SortedMap<Double,Key> findMidPoint(FileSystem fs, AccumuloConfiguration acuConf, Text prevEndRow, Text endRow, Collection<FileRef> mapFiles,
+  public static SortedMap<Double,Key> findMidPoint(VolumeManager fs, AccumuloConfiguration acuConf, Text prevEndRow, Text endRow, Collection<FileRef> mapFiles,
       double minSplit) throws IOException {
     return findMidPoint(fs, acuConf, prevEndRow, endRow, mapFiles, minSplit, true);
   }
   
-  public static double estimatePercentageLTE(FileSystem fs, AccumuloConfiguration acuconf, Text prevEndRow, Text endRow, Collection<FileRef> mapFiles,
+  public static double estimatePercentageLTE(VolumeManager fs, AccumuloConfiguration acuconf, Text prevEndRow, Text endRow, Collection<FileRef> mapFiles,
       Text splitRow) throws IOException {
     
     Configuration conf = CachedConfiguration.getInstance();
@@ -258,7 +259,7 @@ public class FileUtil {
    *          ISSUES : This method used the index files to find the mid point. If the map files have different index intervals this method will not return an
    *          accurate mid point. Also, it would be tricky to use this method in conjunction with an in memory map because the indexing interval is unknown.
    */
-  public static SortedMap<Double,Key> findMidPoint(FileSystem fs, AccumuloConfiguration acuConf, Text prevEndRow, Text endRow, Collection<FileRef> mapFiles,
+  public static SortedMap<Double,Key> findMidPoint(VolumeManager fs, AccumuloConfiguration acuConf, Text prevEndRow, Text endRow, Collection<FileRef> mapFiles,
       double minSplit, boolean useIndex) throws IOException {
     Configuration conf = CachedConfiguration.getInstance();
     
@@ -358,7 +359,7 @@ public class FileUtil {
     }
   }
   
-  private static void cleanupIndexOp(AccumuloConfiguration acuConf, String tmpDir, FileSystem fs, ArrayList<FileSKVIterator> readers) throws IOException {
+  private static void cleanupIndexOp(AccumuloConfiguration acuConf, String tmpDir, VolumeManager fs, ArrayList<FileSKVIterator> readers) throws IOException {
     // close all of the index sequence files
     for (FileSKVIterator r : readers) {
       try {
@@ -380,7 +381,7 @@ public class FileUtil {
   }
   
   private static long countIndexEntries(AccumuloConfiguration acuConf, Text prevEndRow, Text endRow, Collection<FileRef> mapFiles, boolean useIndex,
-      Configuration conf, FileSystem fs, ArrayList<FileSKVIterator> readers) throws IOException {
+      Configuration conf, VolumeManager fs, ArrayList<FileSKVIterator> readers) throws IOException {
     
     long numKeys = 0;
     
@@ -388,7 +389,7 @@ public class FileUtil {
     for (FileRef ref : mapFiles) {
       FileSKVIterator reader = null;
       Path path = ref.path();
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
+      FileSystem ns = fs.getFileSystemByPath(path);
       try {
         if (useIndex)
           reader = FileOperations.getInstance().openIndex(path.toString(), ns, ns.getConf(), acuConf);
@@ -424,7 +425,7 @@ public class FileUtil {
     return numKeys;
   }
   
-  public static Map<FileRef,FileInfo> tryToGetFirstAndLastRows(FileSystem fs, AccumuloConfiguration acuConf, Set<FileRef> mapfiles) {
+  public static Map<FileRef,FileInfo> tryToGetFirstAndLastRows(VolumeManager fs, AccumuloConfiguration acuConf, Set<FileRef> mapfiles) {
     
     HashMap<FileRef,FileInfo> mapFilesInfo = new HashMap<FileRef,FileInfo>();
     
@@ -434,7 +435,7 @@ public class FileUtil {
       
       FileSKVIterator reader = null;
       String path = mapfile.path().toString();
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
+      FileSystem ns = fs.getFileSystemByPath(path);
       try {
         reader = FileOperations.getInstance().openReader(path, false, ns, ns.getConf(), acuConf);
         
@@ -464,12 +465,12 @@ public class FileUtil {
     return mapFilesInfo;
   }
   
-  public static WritableComparable<Key> findLastKey(FileSystem fs, AccumuloConfiguration acuConf, Collection<FileRef> mapFiles) throws IOException {
+  public static WritableComparable<Key> findLastKey(VolumeManager fs, AccumuloConfiguration acuConf, Collection<FileRef> mapFiles) throws IOException {
     Key lastKey = null;
     
     for (FileRef ref : mapFiles) {
       Path path = ref.path();
-      org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(path);
+      FileSystem ns = fs.getFileSystemByPath(path);
       FileSKVIterator reader = FileOperations.getInstance().openReader(path.toString(), true, ns, ns.getConf(), acuConf);
       
       try {
@@ -504,7 +505,7 @@ public class FileUtil {
   }
   
   public static Map<KeyExtent,Long> estimateSizes(AccumuloConfiguration acuConf, Path mapFile, long fileSize, List<KeyExtent> extents, Configuration conf,
-      FileSystem fs) throws IOException {
+      VolumeManager fs) throws IOException {
     
     long totalIndexEntries = 0;
     Map<KeyExtent,MLong> counts = new TreeMap<KeyExtent,MLong>();
@@ -512,7 +513,7 @@ public class FileUtil {
       counts.put(keyExtent, new MLong(0));
     
     Text row = new Text();
-    org.apache.hadoop.fs.FileSystem ns = fs.getFileSystemByPath(mapFile);
+    FileSystem ns = fs.getFileSystemByPath(mapFile);
     FileSKVIterator index = FileOperations.getInstance().openIndex(mapFile.toString(), ns, ns.getConf(), acuConf);
     
     try {

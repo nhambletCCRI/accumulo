@@ -41,13 +41,14 @@ import org.apache.accumulo.core.util.CachedConfiguration;
 import org.apache.accumulo.core.util.Stat;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.cli.ClientOnRequiredTable;
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
 import org.apache.accumulo.server.monitor.Monitor;
 import org.apache.accumulo.server.security.SecurityConstants;
 import org.apache.accumulo.trace.instrument.Tracer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ContentSummary;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
@@ -110,15 +111,15 @@ public class ContinuousStatsCollector {
     }
     
     private String getFSStats() throws Exception {
-      FileSystem fs = FileSystemImpl.get();
+      VolumeManager fs = VolumeManagerImpl.get();
       long length1 = 0, dcount1 = 0, fcount1 = 0;
       long length2 = 0, dcount2 = 0, fcount2 = 0;
       for (String dir : ServerConstants.getTablesDirs()) {
-        ContentSummary contentSummary = fs.getContentSummary(dir);
+        ContentSummary contentSummary = fs.getContentSummary(new Path(dir));
         length1 += contentSummary.getLength();
         dcount1 += contentSummary.getDirectoryCount();
         fcount1 += contentSummary.getFileCount();
-        contentSummary = fs.getContentSummary(dir + "/" + tableId);
+        contentSummary = fs.getContentSummary(new Path(dir, tableId));
         length2 += contentSummary.getLength();
         dcount2 += contentSummary.getDirectoryCount();
         fcount2 += contentSummary.getFileCount();

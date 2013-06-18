@@ -24,12 +24,13 @@ import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 /**
  * A wrapper around multiple hadoop FileSystem objects, which are assumed to be different namespaces.
  */
-public interface FileSystem {
+public interface VolumeManager {
   
   // close the underlying FileSystems
   void close() throws IOException;
@@ -65,18 +66,18 @@ public interface FileSystem {
   FileStatus getFileStatus(Path path) throws IOException;
   
   // find the appropriate FileSystem object given a path
-  org.apache.hadoop.fs.FileSystem getFileSystemByPath(Path path);
+  FileSystem getFileSystemByPath(Path path);
   
-  org.apache.hadoop.fs.FileSystem getFileSystemByPath(String path);
+  FileSystem getFileSystemByPath(String path);
   
-  // get a mapping of namespace to FileSystem
-  Map<String, ? extends org.apache.hadoop.fs.FileSystem> getFileSystems();
+  // get a mapping of volume to FileSystem
+  Map<String, ? extends FileSystem> getFileSystems();
   
   // return the item in options that is in the same namespace as source
   Path matchingFileSystem(Path source, String[] options);
   
-  // create a new path in the same namespace as the sourceDir
-  String newPathOnSameNamespace(String sourceDir, String suffix);
+  // create a new path in the same volume as the sourceDir
+  String newPathOnSameVolume(String sourceDir, String suffix);
   
   // forward to the appropriate FileSystem object
   FileStatus[] listStatus(Path path) throws IOException;
@@ -99,11 +100,11 @@ public interface FileSystem {
   // forward to the appropriate FileSystem object
   boolean isFile(Path path) throws IOException;
   
-  // all namespaces are ready to provide service (not in SafeMode, for example)
+  // all volume are ready to provide service (not in SafeMode, for example)
   boolean isReady() throws IOException;
   
   // ambiguous references to files go here
-  org.apache.hadoop.fs.FileSystem getDefaultNamespace();
+  FileSystem getDefaultVolume();
   
   // forward to the appropriate FileSystem object
   FileStatus[] globStatus(Path path) throws IOException;
@@ -115,5 +116,5 @@ public interface FileSystem {
   Path getFullPath(String paths[], String fileName) throws IOException;
 
   // forward to the appropriate FileSystem object
-  ContentSummary getContentSummary(String dir);
+  ContentSummary getContentSummary(Path dir) throws IOException;
 }

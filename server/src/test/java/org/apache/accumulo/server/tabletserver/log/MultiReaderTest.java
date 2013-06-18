@@ -22,8 +22,9 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 
-import org.apache.accumulo.server.fs.FileSystem;
-import org.apache.accumulo.server.fs.FileSystemImpl;
+import org.apache.accumulo.server.fs.VolumeManager;
+import org.apache.accumulo.server.fs.VolumeManagerImpl;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
@@ -37,20 +38,20 @@ import org.junit.rules.TemporaryFolder;
 
 public class MultiReaderTest {
   
-  FileSystem fs;
+  VolumeManager fs;
   TemporaryFolder root = new TemporaryFolder();
   
   @Before
   public void setUp() throws Exception {
     // quiet log messages about compress.CodecPool
     Logger.getRootLogger().setLevel(Level.ERROR);
-    fs = FileSystemImpl.getLocal();
+    fs = VolumeManagerImpl.getLocal();
     root.create();
     String path = root.getRoot().getAbsolutePath();
     Path root = new Path("file://" + path + "/manyMaps");
     fs.mkdirs(root);
     fs.create(new Path(root, "finished")).close();
-    org.apache.hadoop.fs.FileSystem ns = fs.getDefaultNamespace();
+    FileSystem ns = fs.getDefaultVolume();
     Writer writer = new Writer(ns.getConf(), ns, new Path(root, "odd").toString(), IntWritable.class, BytesWritable.class);
     BytesWritable value = new BytesWritable("someValue".getBytes());
     for (int i = 1; i < 1000; i += 2) {

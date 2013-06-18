@@ -44,7 +44,7 @@ import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.util.Daemon;
 import org.apache.accumulo.core.util.StringUtil;
 import org.apache.accumulo.server.ServerConstants;
-import org.apache.accumulo.server.fs.FileSystem;
+import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.logger.LogFileKey;
 import org.apache.accumulo.server.logger.LogFileValue;
 import org.apache.accumulo.server.master.state.TServerInstance;
@@ -75,7 +75,7 @@ public class DfsLogger {
   public interface ServerResources {
     AccumuloConfiguration getConfiguration();
     
-    FileSystem getFileSystem();
+    VolumeManager getFileSystem();
     
     Set<TServerInstance> getCurrentTServers();
   }
@@ -208,7 +208,7 @@ public class DfsLogger {
     this.logPath = filename;
   }
   
-  public static FSDataInputStream readHeader(FileSystem fs, Path path, Map<String,String> opts) throws IOException {
+  public static FSDataInputStream readHeader(VolumeManager fs, Path path, Map<String,String> opts) throws IOException {
     FSDataInputStream file = fs.open(path);
     try {
       byte[] magic = LOG_FILE_HEADER_V2.getBytes();
@@ -244,7 +244,7 @@ public class DfsLogger {
     
     logPath = new Path(wals[random.nextInt(wals.length)] + "/" + logger + "/" + filename);
     try {
-      FileSystem fs = conf.getFileSystem();
+      VolumeManager fs = conf.getFileSystem();
       short replication = (short) conf.getConfiguration().getCount(Property.TSERV_WAL_REPLICATION);
       if (replication == 0)
         replication = fs.getDefaultReplication(logPath);
