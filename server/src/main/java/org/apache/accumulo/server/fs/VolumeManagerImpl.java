@@ -394,8 +394,8 @@ public class VolumeManagerImpl implements VolumeManager {
     else
       relPath = "/" + new String(tableId) + relPath;
     String fullPath = ServerConstants.getTablesDirs()[0] + relPath;
-    FileSystem ns = getFileSystemByPath(fullPath);
-    return ns.makeQualified(new Path(fullPath));
+    FileSystem fs = getFileSystemByPath(fullPath);
+    return fs.makeQualified(new Path(fullPath));
   }
 
   @Override

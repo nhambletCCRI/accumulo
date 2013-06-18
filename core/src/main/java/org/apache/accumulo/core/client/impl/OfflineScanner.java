@@ -231,6 +231,7 @@ class OfflineIterator implements Iterator<Entry<Key,Value>> {
       throw new AccumuloException(" " + currentExtent + " is not previous extent " + extent);
 
     // TODO: ACCUMULO-118 needs fullpaths
+//    String tablesDir = instance.getConfiguration().get(Property.INSTANCE_DFS_DIR) + "/tables";
     List<String> absFiles = new ArrayList<String>();
     for (String relPath : relFiles) {
       if (relFiles.contains(":")) {

@@ -291,10 +291,6 @@ public class GarbageCollectWriteAheadLogs {
     return result;
   }
   
-  /**
-   * @param name
-   * @return
-   */
   static private boolean isUUID(String name) {
     try {
       UUID.fromString(name);

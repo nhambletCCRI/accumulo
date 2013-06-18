@@ -26,7 +26,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 
 public class ServerConstants {
-
+  
+  // versions should never be negative
+  public static final Integer WIRE_VERSION = 2;
+  public static final int DATA_VERSION = 5;
+  public static final int PREV_DATA_VERSION = 4;
+  
   // these are functions to delay loading the Accumulo configuration unless we must
   public static String[] getBaseDirs() {
     String singleNamespace = ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_DIR);
@@ -84,5 +89,4 @@ public class ServerConstants {
   public static String getRootTabletDir() {
     return prefix(getMetadataTableDirs(), ZROOT_TABLET)[0];
   }
-
 }

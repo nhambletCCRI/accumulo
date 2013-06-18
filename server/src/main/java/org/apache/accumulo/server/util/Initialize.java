@@ -232,7 +232,7 @@ public class Initialize {
     
     final Path metadataTableDirs[] = paths(ServerConstants.getMetadataTableDirs());
 
-    fs.mkdirs(new Path(ServerConstants.getDataVersionLocation(), "" + Constants.DATA_VERSION));
+    fs.mkdirs(new Path(ServerConstants.getDataVersionLocation(), "" + ServerConstants.DATA_VERSION));
     
     // create an instance id
     fs.mkdirs(ServerConstants.getInstanceIdLocation());

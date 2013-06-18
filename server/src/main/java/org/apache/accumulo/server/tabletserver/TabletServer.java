@@ -3232,6 +3232,7 @@ public class TabletServer extends AbstractMetricsImpl implements org.apache.accu
     }
   }
   
+
   public void minorCompactionFinished(CommitSession tablet, String newDatafile, int walogSeq) throws IOException {
     totalMinorCompactions++;
     logger.minorCompactionFinished(tablet, newDatafile, walogSeq);

@@ -129,9 +129,8 @@ public class TableDiskUsage {
     void print(String line);
   }
   
-  public static void printDiskUsage(AccumuloConfiguration acuConf, Collection<String> tables, FileSystem fs, Connector conn, boolean humanReadable) 
-      throws TableNotFoundException,
-      IOException {
+  public static void printDiskUsage(AccumuloConfiguration acuConf, Collection<String> tables, FileSystem fs, Connector conn, boolean humanReadable)
+      throws TableNotFoundException, IOException {
     printDiskUsage(acuConf, tables, fs, conn, new Printer() {
       @Override
       public void print(String line) {
@@ -245,8 +244,8 @@ public class TableDiskUsage {
     return usage;
   }
   
-  public static void printDiskUsage(AccumuloConfiguration acuConf, Collection<String> tables, FileSystem fs, Connector conn, Printer printer, boolean humanReadable)
-      throws TableNotFoundException, IOException {
+  public static void printDiskUsage(AccumuloConfiguration acuConf, Collection<String> tables, FileSystem fs, Connector conn, Printer printer,
+      boolean humanReadable) throws TableNotFoundException, IOException {
     
     HashSet<String> tableIds = new HashSet<String>();
     
@@ -259,7 +258,7 @@ public class TableDiskUsage {
     }
     
     Map<TreeSet<String>,Long> usage = getDiskUsage(acuConf, tableIds, fs, conn);
-
+    
     String valueFormat = humanReadable ? "%9s" : "%,24d";
     for (Entry<TreeSet<String>,Long> entry : usage.entrySet()) {
       Object value = humanReadable ? NumUtil.bigNumberForSize(entry.getValue()) : entry.getValue();

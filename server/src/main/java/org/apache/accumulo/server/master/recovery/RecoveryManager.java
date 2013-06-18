@@ -65,7 +65,7 @@ public class RecoveryManager {
       log.warn(e, e);
     }
   }
-
+  
   private class LogSortTask implements Runnable {
     private String source;
     private String destination;
@@ -78,14 +78,14 @@ public class RecoveryManager {
       this.destination = destination;
       this.sortId = sortId;
     }
-
+    
     @Override
     public void run() {
       boolean rescheduled = false;
       try {
-      
+        
         long time = closer.close(master, master.getFileSystem(), new Path(source));
-      
+        
         if (time > 0) {
           executor.schedule(this, time, TimeUnit.MILLISECONDS);
           rescheduled = true;
@@ -114,13 +114,13 @@ public class RecoveryManager {
     synchronized (this) {
       sortsQueued.add(sortId);
     }
-
+    
     final String path = ZooUtil.getRoot(master.getInstance()) + Constants.ZRECOVERY + "/" + sortId;
     log.info("Created zookeeper entry " + path + " with data " + work);
   }
   
   Random random = new Random();
-
+  
   public boolean recoverLogs(KeyExtent extent, Collection<Collection<String>> walogs) throws IOException {
     boolean recoveryNeeded = false;
     for (Collection<String> logs : walogs) {
@@ -160,17 +160,16 @@ public class RecoveryManager {
         synchronized (this) {
           if (!closeTasksQueued.contains(sortId) && !sortsQueued.contains(sortId)) {
             AccumuloConfiguration aconf = master.getConfiguration().getConfiguration();
-            LogCloser closer = Master.createInstanceFromPropertyName(aconf, Property.MASTER_WALOG_CLOSER_IMPLEMETATION, LogCloser.class,
-                new HadoopLogCloser());
+            LogCloser closer = Master.createInstanceFromPropertyName(aconf, Property.MASTER_WALOG_CLOSER_IMPLEMETATION, LogCloser.class, new HadoopLogCloser());
             Long delay = recoveryDelay.get(sortId);
             if (delay == null) {
               delay = master.getSystemConfiguration().getTimeInMillis(Property.MASTER_RECOVERY_DELAY);
             } else {
               delay = Math.min(2 * delay, 1000 * 60 * 5l);
             }
-
+            
             log.info("Starting recovery of " + filename + " (in : " + (delay / 1000) + "s) created for " + host + ", tablet " + extent + " holds a reference");
-
+            
             executor.schedule(new LogSortTask(closer, filename, dest, sortId), delay, TimeUnit.MILLISECONDS);
             closeTasksQueued.add(sortId);
             recoveryDelay.put(sortId, delay);
