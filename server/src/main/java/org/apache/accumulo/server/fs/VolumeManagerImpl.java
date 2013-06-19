@@ -66,8 +66,8 @@ public class VolumeManagerImpl implements VolumeManager {
     this.conf = conf;
     ensureSyncIsEnabled();
     try {
-      this.getClass().getClassLoader().loadClass(conf.get(Property.GENERAL_VOLUME_CHOOSER));
-    } catch (ClassNotFoundException e) {
+      chooser = (VolumeChooser)this.getClass().getClassLoader().loadClass(conf.get(Property.GENERAL_VOLUME_CHOOSER)).newInstance();
+    } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
@@ -306,14 +306,14 @@ public class VolumeManagerImpl implements VolumeManager {
     return getFileSystemByPath(path).isFile(path);
   }
 
-  public static org.apache.accumulo.server.fs.VolumeManager get() throws IOException {
+  public static VolumeManager get() throws IOException {
     AccumuloConfiguration conf = ServerConfiguration.getSystemConfiguration(HdfsZooInstance.getInstance());
     return get(conf);
   }
   
   static private final String DEFAULT = "";
 
-  public static org.apache.accumulo.server.fs.VolumeManager get(AccumuloConfiguration conf) throws IOException {
+  public static VolumeManager get(AccumuloConfiguration conf) throws IOException {
     Map<String, FileSystem> fileSystems = new HashMap<String, FileSystem>();
     Configuration hadoopConf = CachedConfiguration.getInstance();
     fileSystems.put(DEFAULT, FileSystem.get(hadoopConf));

@@ -75,11 +75,11 @@ public class ServerConstants {
   }
   
   public static Path getInstanceIdLocation() {
-    return new Path(ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_DIR) + "/instance_id");
+    return new Path(getBaseDirs()[0] + "/instance_id");
   }
   
   public static Path getDataVersionLocation() {
-    return new Path(ServerConfiguration.getSiteConfiguration().get(Property.INSTANCE_DFS_DIR) + "/version");
+    return new Path(getBaseDirs()[0] + "/version");
   }
   
   public static String[] getMetadataTableDirs() {

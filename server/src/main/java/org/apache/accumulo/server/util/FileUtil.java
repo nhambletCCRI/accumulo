@@ -434,7 +434,6 @@ public class FileUtil {
     for (FileRef mapfile : mapfiles) {
       
       FileSKVIterator reader = null;
-      //String path = mapfile.path().toString();
       FileSystem ns = fs.getFileSystemByPath(mapfile.path());
       try {
         reader = FileOperations.getInstance().openReader(mapfile.toString(), false, ns, ns.getConf(), acuConf);
