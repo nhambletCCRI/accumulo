@@ -18,7 +18,6 @@ package org.apache.accumulo.server.master.tableOps;
 
 import java.util.Map.Entry;
 
-import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.BatchWriter;
 import org.apache.accumulo.core.client.BatchWriterConfig;
 import org.apache.accumulo.core.client.Connector;
@@ -62,14 +61,14 @@ class MakeDeleteEntries extends MasterRepo {
   public Repo<Master> call(long tid, Master master) throws Exception {
     log.info("creating delete entries for merged metadata tablets");
     Connector conn = master.getConnector();
-    Scanner scanner = conn.createScanner(Constants.METADATA_TABLE_NAME, Authorizations.EMPTY);
-    scanner.setRange(Constants.METADATA_ROOT_TABLET_KEYSPACE);
-    scanner.fetchColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY);
-    BatchWriter bw = conn.createBatchWriter(Constants.METADATA_TABLE_NAME, new BatchWriterConfig());
+    Scanner scanner = conn.createScanner(MetadataTable.NAME, Authorizations.EMPTY);
+    scanner.setRange(MetadataTable.KEYSPACE);
+    scanner.fetchColumnFamily(MetadataTable.DATAFILE_COLUMN_FAMILY);
+    BatchWriter bw = conn.createBatchWriter(MetadataTable.NAME, new BatchWriterConfig());
     for (Entry<Key,Value> entry : scanner) {
       // TODO: add the entries only if there are no !METADATA table references - ACCUMULO-1308
       FileRef ref = new FileRef(master.getFileSystem(), entry.getKey());
-      bw.addMutation(MetadataTable.createDeleteMutation(Constants.METADATA_TABLE_ID, ref.path().toString()));
+      bw.addMutation(MetadataTable.createDeleteMutation(MetadataTable.ID, ref.path().toString()));
     }
     bw.close();
     return null;
@@ -105,7 +104,7 @@ class TableRangeOpWait extends MasterRepo {
     // If the delete entries for the metadata table were in the root tablet, it would work just fine
     // but all the delete entries go into the end of the metadata table. Work around: add the
     // delete entries after the merge completes.
-    if (mergeInfo.getOperation().equals(Operation.MERGE) && tableId.equals(Constants.METADATA_TABLE_ID)) {
+    if (mergeInfo.getOperation().equals(Operation.MERGE) && tableId.equals(MetadataTable.ID)) {
       return new MakeDeleteEntries();
     }
     return null;

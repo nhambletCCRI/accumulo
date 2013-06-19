@@ -46,6 +46,7 @@ import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.master.state.tables.TableState;
 import org.apache.accumulo.core.security.Authorizations;
+import org.apache.accumulo.core.util.MetadataTable;
 import org.apache.accumulo.fate.Repo;
 import org.apache.accumulo.server.ServerConstants;
 import org.apache.accumulo.server.conf.ServerConfiguration;
@@ -95,12 +96,12 @@ class WriteExportFiles extends MasterRepo {
     
     checkOffline(conn);
     
-    Scanner metaScanner = conn.createScanner(Constants.METADATA_TABLE_NAME, Authorizations.EMPTY);
+    Scanner metaScanner = conn.createScanner(MetadataTable.NAME, Authorizations.EMPTY);
     metaScanner.setRange(new KeyExtent(new Text(tableInfo.tableID), null, null).toMetadataRange());
     
     // scan for locations
-    metaScanner.fetchColumnFamily(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY);
-    metaScanner.fetchColumnFamily(Constants.METADATA_FUTURE_LOCATION_COLUMN_FAMILY);
+    metaScanner.fetchColumnFamily(MetadataTable.CURRENT_LOCATION_COLUMN_FAMILY);
+    metaScanner.fetchColumnFamily(MetadataTable.FUTURE_LOCATION_COLUMN_FAMILY);
     
     if (metaScanner.iterator().hasNext()) {
       return 500;
@@ -109,7 +110,7 @@ class WriteExportFiles extends MasterRepo {
     // use the same range to check for walogs that we used to check for hosted (or future hosted) tablets
     // this is done as a separate scan after we check for locations, because walogs are okay only if there is no location
     metaScanner.clearColumns();
-    metaScanner.fetchColumnFamily(Constants.METADATA_LOG_COLUMN_FAMILY);
+    metaScanner.fetchColumnFamily(MetadataTable.LOG_COLUMN_FAMILY);
     
     if (metaScanner.iterator().hasNext()) {
       throw new ThriftTableOperationException(tableInfo.tableID, tableInfo.tableName, TableOperation.EXPORT, TableOperationExceptionType.OTHER,
@@ -209,17 +210,17 @@ class WriteExportFiles extends MasterRepo {
     
     Map<String,String> uniqueFiles = new HashMap<String,String>();
     
-    Scanner metaScanner = conn.createScanner(Constants.METADATA_TABLE_NAME, Authorizations.EMPTY);
-    metaScanner.fetchColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY);
-    Constants.METADATA_PREV_ROW_COLUMN.fetch(metaScanner);
-    Constants.METADATA_TIME_COLUMN.fetch(metaScanner);
+    Scanner metaScanner = conn.createScanner(MetadataTable.NAME, Authorizations.EMPTY);
+    metaScanner.fetchColumnFamily(MetadataTable.DATAFILE_COLUMN_FAMILY);
+    MetadataTable.PREV_ROW_COLUMN.fetch(metaScanner);
+    MetadataTable.TIME_COLUMN.fetch(metaScanner);
     metaScanner.setRange(new KeyExtent(new Text(tableID), null, null).toMetadataRange());
     
     for (Entry<Key,Value> entry : metaScanner) {
       entry.getKey().write(dataOut);
       entry.getValue().write(dataOut);
       
-      if (entry.getKey().getColumnFamily().equals(Constants.METADATA_DATAFILE_COLUMN_FAMILY)) {
+      if (entry.getKey().getColumnFamily().equals(MetadataTable.DATAFILE_COLUMN_FAMILY)) {
         String path = fs.getFullPath(entry.getKey()).toString();
         String tokens[] = path.split("/");
         if (tokens.length < 1) {

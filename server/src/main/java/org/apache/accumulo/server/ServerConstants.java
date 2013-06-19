@@ -16,11 +16,10 @@
  */
 package org.apache.accumulo.server;
 
-import static org.apache.accumulo.core.Constants.METADATA_TABLE_ID;
-import static org.apache.accumulo.core.Constants.ZROOT_TABLET;
-
 import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.util.CachedConfiguration;
+import org.apache.accumulo.core.util.MetadataTable;
+import org.apache.accumulo.core.util.RootTable;
 import org.apache.accumulo.server.conf.ServerConfiguration;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -83,10 +82,10 @@ public class ServerConstants {
   }
   
   public static String[] getMetadataTableDirs() {
-    return prefix(getTablesDirs(), METADATA_TABLE_ID);
+    return prefix(getTablesDirs(), MetadataTable.ID);
   }
   
   public static String getRootTabletDir() {
-    return prefix(getMetadataTableDirs(), ZROOT_TABLET)[0];
+    return prefix(getMetadataTableDirs(), RootTable.ZROOT_TABLET)[0];
   }
 }

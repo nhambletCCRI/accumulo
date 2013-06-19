@@ -45,6 +45,8 @@ import org.apache.accumulo.core.master.state.tables.TableState;
 import org.apache.accumulo.core.master.thrift.MasterGoalState;
 import org.apache.accumulo.core.security.SecurityUtil;
 import org.apache.accumulo.core.util.CachedConfiguration;
+import org.apache.accumulo.core.util.MetadataTable;
+import org.apache.accumulo.core.util.RootTable;
 import org.apache.accumulo.core.zookeeper.ZooUtil;
 import org.apache.accumulo.fate.zookeeper.IZooReaderWriter;
 import org.apache.accumulo.fate.zookeeper.ZooUtil.NodeExistsPolicy;
@@ -105,10 +107,10 @@ public class Initialize {
     initialMetadataConf.put(Property.TABLE_ITERATOR_PREFIX.getKey() + "majc.bulkLoadFilter", "20," + MetadataBulkLoadFilter.class.getName());
     initialMetadataConf.put(Property.TABLE_FAILURES_IGNORE.getKey(), "false");
     initialMetadataConf.put(Property.TABLE_LOCALITY_GROUP_PREFIX.getKey() + "tablet",
-        String.format("%s,%s", Constants.METADATA_TABLET_COLUMN_FAMILY.toString(), Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY.toString()));
+        String.format("%s,%s", MetadataTable.TABLET_COLUMN_FAMILY.toString(), MetadataTable.CURRENT_LOCATION_COLUMN_FAMILY.toString()));
     initialMetadataConf.put(Property.TABLE_LOCALITY_GROUP_PREFIX.getKey() + "server", String.format("%s,%s,%s,%s",
-        Constants.METADATA_DATAFILE_COLUMN_FAMILY.toString(), Constants.METADATA_LOG_COLUMN_FAMILY.toString(),
-        Constants.METADATA_SERVER_COLUMN_FAMILY.toString(), Constants.METADATA_FUTURE_LOCATION_COLUMN_FAMILY.toString()));
+        MetadataTable.DATAFILE_COLUMN_FAMILY.toString(), MetadataTable.LOG_COLUMN_FAMILY.toString(), MetadataTable.SERVER_COLUMN_FAMILY.toString(),
+        MetadataTable.FUTURE_LOCATION_COLUMN_FAMILY.toString()));
     initialMetadataConf.put(Property.TABLE_LOCALITY_GROUPS.getKey(), "tablet,server");
     initialMetadataConf.put(Property.TABLE_DEFAULT_SCANTIME_VISIBILITY.getKey(), "");
     initialMetadataConf.put(Property.TABLE_INDEXCACHE_ENABLED.getKey(), "true");
@@ -189,9 +191,6 @@ public class Initialize {
     return true;
   }
   
-  /**
-   * @return
-   */
   private static boolean zookeeperAvailable() {
     IZooReaderWriter zoo = ZooReaderWriter.getInstance();
     try {
@@ -227,7 +226,7 @@ public class Initialize {
     // the actual disk location of the root tablet
     final Path rootTablet = new Path(ServerConstants.getRootTabletDir());
     
-    final Path tableMetadataTabletDirs[] = paths(ServerConstants.prefix(ServerConstants.getMetadataTableDirs(), Constants.TABLE_TABLET_LOCATION));
+    final Path tableMetadataTabletDirs[] = paths(ServerConstants.prefix(ServerConstants.getMetadataTableDirs(), MetadataTable.TABLE_TABLET_LOCATION));
     final Path defaultMetadataTabletDirs[] = paths(ServerConstants.prefix(ServerConstants.getMetadataTableDirs(), Constants.DEFAULT_TABLET_LOCATION));
     
     final Path metadataTableDirs[] = paths(ServerConstants.getMetadataTableDirs());
@@ -281,48 +280,48 @@ public class Initialize {
     mfw.startDefaultLocalityGroup();
     
     // -----------] root tablet info
-    Text rootExtent = Constants.ROOT_TABLET_EXTENT.getMetadataEntry();
+    Text rootExtent = RootTable.ROOT_TABLET_EXTENT.getMetadataEntry();
     
     // root's directory
-    Key rootDirKey = new Key(rootExtent, Constants.METADATA_DIRECTORY_COLUMN.getColumnFamily(), Constants.METADATA_DIRECTORY_COLUMN.getColumnQualifier(), 0);
+    Key rootDirKey = new Key(rootExtent, MetadataTable.DIRECTORY_COLUMN.getColumnFamily(), MetadataTable.DIRECTORY_COLUMN.getColumnQualifier(), 0);
     mfw.append(rootDirKey, new Value("/root_tablet".getBytes()));
     
     // root's prev row
-    Key rootPrevRowKey = new Key(rootExtent, Constants.METADATA_PREV_ROW_COLUMN.getColumnFamily(), Constants.METADATA_PREV_ROW_COLUMN.getColumnQualifier(), 0);
+    Key rootPrevRowKey = new Key(rootExtent, MetadataTable.PREV_ROW_COLUMN.getColumnFamily(), MetadataTable.PREV_ROW_COLUMN.getColumnQualifier(), 0);
     mfw.append(rootPrevRowKey, new Value(new byte[] {0}));
     
     // ----------] table tablet info
-    Text tableExtent = new Text(KeyExtent.getMetadataEntry(new Text(Constants.METADATA_TABLE_ID), Constants.METADATA_RESERVED_KEYSPACE_START_KEY.getRow()));
+    Text tableExtent = new Text(KeyExtent.getMetadataEntry(new Text(MetadataTable.ID), MetadataTable.RESERVED_KEYSPACE_START_KEY.getRow()));
     
     // table tablet's directory
-    Key tableDirKey = new Key(tableExtent, Constants.METADATA_DIRECTORY_COLUMN.getColumnFamily(), Constants.METADATA_DIRECTORY_COLUMN.getColumnQualifier(), 0);
-    mfw.append(tableDirKey, new Value(Constants.TABLE_TABLET_LOCATION.getBytes()));
+    Key tableDirKey = new Key(tableExtent, MetadataTable.DIRECTORY_COLUMN.getColumnFamily(), MetadataTable.DIRECTORY_COLUMN.getColumnQualifier(), 0);
+    mfw.append(tableDirKey, new Value(MetadataTable.TABLE_TABLET_LOCATION.getBytes()));
     
     // table tablet time
-    Key tableTimeKey = new Key(tableExtent, Constants.METADATA_TIME_COLUMN.getColumnFamily(), Constants.METADATA_TIME_COLUMN.getColumnQualifier(), 0);
+    Key tableTimeKey = new Key(tableExtent, MetadataTable.TIME_COLUMN.getColumnFamily(), MetadataTable.TIME_COLUMN.getColumnQualifier(), 0);
     mfw.append(tableTimeKey, new Value((TabletTime.LOGICAL_TIME_ID + "0").getBytes()));
     
     // table tablet's prevrow
-    Key tablePrevRowKey = new Key(tableExtent, Constants.METADATA_PREV_ROW_COLUMN.getColumnFamily(), Constants.METADATA_PREV_ROW_COLUMN.getColumnQualifier(),
+    Key tablePrevRowKey = new Key(tableExtent, MetadataTable.PREV_ROW_COLUMN.getColumnFamily(), MetadataTable.PREV_ROW_COLUMN.getColumnQualifier(),
         0);
-    mfw.append(tablePrevRowKey, KeyExtent.encodePrevEndRow(new Text(KeyExtent.getMetadataEntry(new Text(Constants.METADATA_TABLE_ID), null))));
+    mfw.append(tablePrevRowKey, KeyExtent.encodePrevEndRow(new Text(KeyExtent.getMetadataEntry(new Text(MetadataTable.ID), null))));
     
     // ----------] default tablet info
-    Text defaultExtent = new Text(KeyExtent.getMetadataEntry(new Text(Constants.METADATA_TABLE_ID), null));
+    Text defaultExtent = new Text(KeyExtent.getMetadataEntry(new Text(MetadataTable.ID), null));
     
     // default's directory
-    Key defaultDirKey = new Key(defaultExtent, Constants.METADATA_DIRECTORY_COLUMN.getColumnFamily(),
-        Constants.METADATA_DIRECTORY_COLUMN.getColumnQualifier(), 0);
+    Key defaultDirKey = new Key(defaultExtent, MetadataTable.DIRECTORY_COLUMN.getColumnFamily(),
+        MetadataTable.DIRECTORY_COLUMN.getColumnQualifier(), 0);
     mfw.append(defaultDirKey, new Value(Constants.DEFAULT_TABLET_LOCATION.getBytes()));
     
     // default's time
-    Key defaultTimeKey = new Key(defaultExtent, Constants.METADATA_TIME_COLUMN.getColumnFamily(), Constants.METADATA_TIME_COLUMN.getColumnQualifier(), 0);
+    Key defaultTimeKey = new Key(defaultExtent, MetadataTable.TIME_COLUMN.getColumnFamily(), MetadataTable.TIME_COLUMN.getColumnQualifier(), 0);
     mfw.append(defaultTimeKey, new Value((TabletTime.LOGICAL_TIME_ID + "0").getBytes()));
     
     // default's prevrow
-    Key defaultPrevRowKey = new Key(defaultExtent, Constants.METADATA_PREV_ROW_COLUMN.getColumnFamily(),
-        Constants.METADATA_PREV_ROW_COLUMN.getColumnQualifier(), 0);
-    mfw.append(defaultPrevRowKey, KeyExtent.encodePrevEndRow(Constants.METADATA_RESERVED_KEYSPACE_START_KEY.getRow()));
+    Key defaultPrevRowKey = new Key(defaultExtent, MetadataTable.PREV_ROW_COLUMN.getColumnFamily(),
+        MetadataTable.PREV_ROW_COLUMN.getColumnQualifier(), 0);
+    mfw.append(defaultPrevRowKey, KeyExtent.encodePrevEndRow(MetadataTable.RESERVED_KEYSPACE_START_KEY.getRow()));
     
     mfw.close();
     
@@ -373,11 +372,11 @@ public class Initialize {
     String zkInstanceRoot = Constants.ZROOT + "/" + uuid;
     zoo.putPersistentData(zkInstanceRoot, new byte[0], NodeExistsPolicy.FAIL);
     zoo.putPersistentData(zkInstanceRoot + Constants.ZTABLES, Constants.ZTABLES_INITIAL_ID, NodeExistsPolicy.FAIL);
-    TableManager.prepareNewTableState(uuid, Constants.METADATA_TABLE_ID, Constants.METADATA_TABLE_NAME, TableState.ONLINE, NodeExistsPolicy.FAIL);
+    TableManager.prepareNewTableState(uuid, MetadataTable.ID, MetadataTable.NAME, TableState.ONLINE, NodeExistsPolicy.FAIL);
     zoo.putPersistentData(zkInstanceRoot + Constants.ZTSERVERS, new byte[0], NodeExistsPolicy.FAIL);
     zoo.putPersistentData(zkInstanceRoot + Constants.ZPROBLEMS, new byte[0], NodeExistsPolicy.FAIL);
-    zoo.putPersistentData(zkInstanceRoot + Constants.ZROOT_TABLET, new byte[0], NodeExistsPolicy.FAIL);
-    zoo.putPersistentData(zkInstanceRoot + Constants.ZROOT_TABLET_WALOGS, new byte[0], NodeExistsPolicy.FAIL);
+    zoo.putPersistentData(zkInstanceRoot + RootTable.ZROOT_TABLET, new byte[0], NodeExistsPolicy.FAIL);
+    zoo.putPersistentData(zkInstanceRoot + RootTable.ZROOT_TABLET_WALOGS, new byte[0], NodeExistsPolicy.FAIL);
     zoo.putPersistentData(zkInstanceRoot + Constants.ZTRACERS, new byte[0], NodeExistsPolicy.FAIL);
     zoo.putPersistentData(zkInstanceRoot + Constants.ZMASTERS, new byte[0], NodeExistsPolicy.FAIL);
     zoo.putPersistentData(zkInstanceRoot + Constants.ZMASTER_LOCK, new byte[0], NodeExistsPolicy.FAIL);
@@ -458,7 +457,7 @@ public class Initialize {
       if (min > 5)
         setMetadataReplication(min, "min");
       for (Entry<String,String> entry : initialMetadataConf.entrySet())
-        if (!TablePropUtil.setTableProperty(Constants.METADATA_TABLE_ID, entry.getKey(), entry.getValue()))
+        if (!TablePropUtil.setTableProperty(MetadataTable.ID, entry.getKey(), entry.getValue()))
           throw new IOException("Cannot create per-table property " + entry.getKey());
     } catch (Exception e) {
       log.fatal("error talking to zookeeper", e);
@@ -468,8 +467,8 @@ public class Initialize {
   
   private static void setMetadataReplication(int replication, String reason) throws IOException {
     String rep = getConsoleReader().readLine(
-        "Your HDFS replication " + reason + " is not compatible with our default " + Constants.METADATA_TABLE_NAME
-            + " replication of 5. What do you want to set your " + Constants.METADATA_TABLE_NAME + " replication to? (" + replication + ") ");
+        "Your HDFS replication " + reason + " is not compatible with our default " + MetadataTable.NAME + " replication of 5. What do you want to set your "
+            + MetadataTable.NAME + " replication to? (" + replication + ") ");
     if (rep == null || rep.length() == 0)
       rep = Integer.toString(replication);
     else

@@ -22,12 +22,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.apache.accumulo.core.Constants;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.security.Authorizations;
+import org.apache.accumulo.core.util.MetadataTable;
 import org.apache.accumulo.server.cli.ClientOpts;
 import org.apache.accumulo.server.fs.VolumeManager;
 import org.apache.accumulo.server.fs.VolumeManagerImpl;
@@ -44,10 +44,10 @@ public class LocalityCheck {
     
     VolumeManager fs = VolumeManagerImpl.get();
     Connector connector = opts.getConnector();
-    Scanner scanner = connector.createScanner(Constants.METADATA_TABLE_NAME, Authorizations.EMPTY);
-    scanner.fetchColumnFamily(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY);
-    scanner.fetchColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY);
-    scanner.setRange(Constants.METADATA_KEYSPACE);
+    Scanner scanner = connector.createScanner(MetadataTable.NAME, Authorizations.EMPTY);
+    scanner.fetchColumnFamily(MetadataTable.CURRENT_LOCATION_COLUMN_FAMILY);
+    scanner.fetchColumnFamily(MetadataTable.DATAFILE_COLUMN_FAMILY);
+    scanner.setRange(MetadataTable.KEYSPACE);
     
     Map<String,Long> totalBlocks = new HashMap<String,Long>();
     Map<String,Long> localBlocks = new HashMap<String,Long>();
@@ -55,13 +55,13 @@ public class LocalityCheck {
     
     for (Entry<Key,Value> entry : scanner) {
       Key key = entry.getKey();
-      if (key.compareColumnFamily(Constants.METADATA_CURRENT_LOCATION_COLUMN_FAMILY) == 0) {
+      if (key.compareColumnFamily(MetadataTable.CURRENT_LOCATION_COLUMN_FAMILY) == 0) {
         String location = entry.getValue().toString();
         String[] parts = location.split(":");
         String host = parts[0];
         addBlocks(fs, host, files, totalBlocks, localBlocks);
         files.clear();
-      } else if (key.compareColumnFamily(Constants.METADATA_DATAFILE_COLUMN_FAMILY) == 0) {
+      } else if (key.compareColumnFamily(MetadataTable.DATAFILE_COLUMN_FAMILY) == 0) {
         
         files.add(fs.getFullPath(key).toString());
       }
