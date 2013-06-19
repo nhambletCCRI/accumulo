@@ -29,6 +29,7 @@ import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.KeyExtent;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.security.Authorizations;
+import org.apache.accumulo.core.util.RootTable;
 import org.apache.accumulo.core.util.TextUtil;
 import org.apache.accumulo.fate.Repo;
 import org.apache.accumulo.server.fs.FileRef;
@@ -62,7 +63,7 @@ class MakeDeleteEntries extends MasterRepo {
     log.info("creating delete entries for merged metadata tablets");
     Connector conn = master.getConnector();
     Scanner scanner = conn.createScanner(MetadataTable.NAME, Authorizations.EMPTY);
-    scanner.setRange(MetadataTable.KEYSPACE);
+    scanner.setRange(RootTable.KEYSPACE);
     scanner.fetchColumnFamily(MetadataTable.DATAFILE_COLUMN_FAMILY);
     BatchWriter bw = conn.createBatchWriter(MetadataTable.NAME, new BatchWriterConfig());
     for (Entry<Key,Value> entry : scanner) {
